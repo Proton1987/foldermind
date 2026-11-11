@@ -1,0 +1,1925 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Directory Tree & Mind Map Visualizer</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkbg: '#090d16',
+                        darkcard: '#111726',
+                        darkborder: '#1e293b',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom Scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #090d16;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #334155;
+        }
+
+        /* Glassmorphism Styles */
+        .glass-panel {
+            background: rgba(17, 23, 38, 0.78);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        /* Grid Background pattern */
+        .bg-grid-pattern {
+            background-size: 32px 32px;
+            background-image: 
+                linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+        }
+
+        /* Prevent text selection while panning mind map */
+        .no-select {
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* SVG Node animations & interactions */
+        .mindmap-node {
+            transition: transform 0.15s ease-out, filter 0.15s ease-out;
+        }
+        .mindmap-node:hover {
+            filter: drop-shadow(0 0 12px rgba(99, 102, 241, 0.5));
+        }
+
+        .connection-line {
+            transition: stroke 0.2s, stroke-width 0.2s;
+        }
+        .connection-line:hover {
+            stroke-width: 3.5px;
+        }
+
+        /* Action buttons hover inside nodes */
+        .node-action-btn {
+            transition: all 0.15s ease;
+            cursor: pointer;
+        }
+        .node-action-btn:hover {
+            transform: scale(1.18);
+            filter: brightness(1.2);
+        }
+
+        /* Tree view hover glow */
+        .tree-row {
+            transition: background-color 0.15s ease, border-color 0.15s ease;
+        }
+        .tree-row:hover {
+            background-color: rgba(255, 255, 255, 0.04);
+        }
+    </style>
+</head>
+<body class="bg-darkbg text-slate-100 font-sans antialiased h-screen overflow-hidden flex flex-col">
+
+    <!-- Top Navigation Header -->
+    <header class="h-16 glass-panel border-b border-slate-800/80 px-4 flex items-center justify-between shrink-0 z-30">
+        <!-- Brand & Logo -->
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 via-indigo-500 to-cyan-400 p-0.5 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                <div class="w-full h-full bg-darkbg rounded-[10px] flex items-center justify-center">
+                    <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 002-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+                    </svg>
+                </div>
+            </div>
+            <div>
+                <h1 class="font-bold text-base bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent flex items-center gap-2">
+                    FolderMind <span class="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-mono font-medium border border-indigo-500/30">v3.0 Sync</span>
+                </h1>
+                <p class="text-xs text-slate-400">Real-Time Directory Mind Map & Disk Manager</p>
+            </div>
+        </div>
+
+        <!-- Middle Controls: View Selector & Search -->
+        <div class="flex items-center gap-3">
+            <!-- View Toggle -->
+            <div class="bg-slate-900/90 p-1 rounded-xl border border-slate-800 flex items-center text-xs font-medium">
+                <button id="viewMindmapBtn" class="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all text-white bg-indigo-600 shadow-md">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18"></path></svg>
+                    <span>Mind Map</span>
+                </button>
+                <button id="viewTreeBtn" class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 transition-all">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"></path></svg>
+                    <span>Tree List</span>
+                </button>
+            </div>
+
+            <!-- Search Input -->
+            <div class="relative w-48 sm:w-64">
+                <input type="text" id="searchInput" placeholder="Filter files or extensions..." class="w-full bg-slate-900/80 border border-slate-800 rounded-xl px-3 py-1.5 pl-8 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors">
+                <svg class="w-4 h-4 text-slate-500 absolute left-2.5 top-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                <button id="clearSearchBtn" class="hidden absolute right-2.5 top-2 text-slate-500 hover:text-slate-300">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Action Buttons & Export Menu -->
+        <div class="flex items-center gap-2">
+            <!-- Real-Time Sync Disk Selector (Primary) -->
+            <button id="openLiveSyncBtn" class="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-semibold px-3.5 py-1.5 rounded-xl text-xs transition-all shadow-lg shadow-emerald-500/20 active:scale-95">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                <span>เปิดโฟลเดอร์แบบ Sync เครื่องจริง</span>
+            </button>
+
+            <!-- Open Folder Input Fallback (Read-Only) -->
+            <input type="file" id="folderInput" webkitdirectory directory multiple class="hidden">
+            <button id="selectFolderBtn" title="เปิดโฟลเดอร์แบบดูอย่างเดียว (Read-Only)" class="flex items-center gap-1.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 px-3 py-1.5 rounded-xl text-xs font-medium transition-all">
+                <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 002-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
+                <span class="hidden lg:inline">ดูอย่างเดียว</span>
+            </button>
+
+            <!-- Export Menu Button & Dropdown -->
+            <div class="relative">
+                <button id="exportMenuBtn" class="flex items-center gap-1.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 px-3 py-1.5 rounded-xl text-xs font-medium transition-all">
+                    <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    <span>Export</span>
+                    <svg class="w-3 h-3 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </button>
+
+                <div id="exportDropdown" class="hidden absolute right-0 mt-2 w-48 glass-panel rounded-xl shadow-2xl py-1 z-50 text-xs border border-slate-800">
+                    <button id="exportPngBtn" class="w-full text-left px-3 py-2 hover:bg-indigo-600/20 text-slate-200 flex items-center gap-2">
+                        <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                        Export High-Res PNG
+                    </button>
+                    <button id="exportSvgBtn" class="w-full text-left px-3 py-2 hover:bg-indigo-600/20 text-slate-200 flex items-center gap-2">
+                        <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+                        Export SVG Vector
+                    </button>
+                    <button id="exportAsciiBtn" class="w-full text-left px-3 py-2 hover:bg-indigo-600/20 text-slate-200 flex items-center gap-2">
+                        <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        Copy ASCII Tree Text
+                    </button>
+                    <div class="h-px bg-slate-800 my-1"></div>
+                    <button id="exportJsonBtn" class="w-full text-left px-3 py-2 hover:bg-indigo-600/20 text-slate-200 flex items-center gap-2">
+                        <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2 1.5 3 3.5 3h9c2 0 3.5-1 3.5-3V7c0-2-1.5-3-3.5-3h-9C5.5 4 4 5 4 7z"></path></svg>
+                        Export JSON Structure
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Sub-bar Tools & Info -->
+    <div id="subBar" class="h-10 bg-slate-950/80 border-b border-slate-900 px-4 flex items-center justify-between text-xs text-slate-400 shrink-0">
+        <div class="flex items-center gap-3">
+            <!-- Mode Badge -->
+            <div id="modeBadge" class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-900 text-slate-400 border border-slate-800">
+                <span class="w-2 h-2 rounded-full bg-slate-500"></span>
+                <span>ยังไม่ได้โหลดโฟลเดอร์</span>
+            </div>
+
+            <span id="statRootName" class="font-medium text-slate-200 truncate max-w-xs">No directory loaded</span>
+            <span id="statSummary" class="hidden sm:inline-block text-slate-400 border-l border-slate-800 pl-3">0 files, 0 folders</span>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <!-- Mind map navigation toolbar controls -->
+            <div id="mindmapControls" class="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-0.5">
+                <button id="zoomOutBtn" title="Zoom Out" class="p-1 hover:bg-slate-800 rounded text-slate-300 hover:text-white"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path></svg></button>
+                <span id="zoomLabel" class="text-[11px] font-mono px-1.5 text-slate-400">100%</span>
+                <button id="zoomInBtn" title="Zoom In" class="p-1 hover:bg-slate-800 rounded text-slate-300 hover:text-white"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg></button>
+                <button id="zoomFitBtn" title="Fit Screen" class="p-1 hover:bg-slate-800 rounded text-slate-300 hover:text-white ml-1 border-l border-slate-800 pl-1.5"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg></button>
+            </div>
+
+            <!-- Collapse / Expand Tree buttons -->
+            <div class="flex items-center gap-1 border-l border-slate-800 pl-2">
+                <button id="expandAllBtn" class="px-2 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-lg transition-colors text-[11px]">Expand All</button>
+                <button id="collapseAllBtn" class="px-2 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-lg transition-colors text-[11px]">Collapse All</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Work Area -->
+    <main class="flex-1 relative overflow-hidden flex">
+        
+        <!-- Left Stats & Legend Sidebar -->
+        <aside id="statsSidebar" class="w-64 glass-panel border-r border-slate-800/80 flex flex-col shrink-0 transition-all duration-300 z-20">
+            <div class="p-3.5 border-b border-slate-800/80 flex items-center justify-between">
+                <h2 class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2z"></path></svg>
+                    Insights & Legend
+                </h2>
+                <button id="toggleSidebarBtn" class="text-slate-500 hover:text-slate-300 p-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                </button>
+            </div>
+
+            <div class="p-4 flex-1 overflow-y-auto space-y-6">
+                <!-- Overview Stats Grid -->
+                <div>
+                    <h3 class="text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-2">Metrics</h3>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div class="bg-slate-900/60 border border-slate-800/80 p-2.5 rounded-xl">
+                            <span class="text-slate-400 text-[10px] block">Total Files</span>
+                            <span id="statFilesCount" class="text-lg font-bold text-cyan-400 font-mono">0</span>
+                        </div>
+                        <div class="bg-slate-900/60 border border-slate-800/80 p-2.5 rounded-xl">
+                            <span class="text-slate-400 text-[10px] block">Total Folders</span>
+                            <span id="statFoldersCount" class="text-lg font-bold text-amber-400 font-mono">0</span>
+                        </div>
+                        <div class="bg-slate-900/60 border border-slate-800/80 p-2.5 rounded-xl col-span-2">
+                            <span class="text-slate-400 text-[10px] block">Total Disk Size</span>
+                            <span id="statTotalSize" class="text-base font-bold text-emerald-400 font-mono">0 KB</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Color Legend / Extension Categories -->
+                <div>
+                    <h3 class="text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-2.5">File Categories</h3>
+                    <div class="space-y-1.5 text-xs">
+                        <div class="flex items-center justify-between p-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300">
+                            <div class="flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+                                <span>Folders</span>
+                            </div>
+                            <span id="badgeFolderCount" class="font-mono text-[10px] bg-amber-500/20 px-1.5 py-0.5 rounded">0</span>
+                        </div>
+                        <div class="flex items-center justify-between p-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-300">
+                            <div class="flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
+                                <span>Code / Scripts</span>
+                            </div>
+                            <span id="badgeCodeCount" class="font-mono text-[10px] bg-cyan-500/20 px-1.5 py-0.5 rounded">0</span>
+                        </div>
+                        <div class="flex items-center justify-between p-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-300">
+                            <div class="flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-purple-400"></span>
+                                <span>Images & Media</span>
+                            </div>
+                            <span id="badgeMediaCount" class="font-mono text-[10px] bg-purple-500/20 px-1.5 py-0.5 rounded">0</span>
+                        </div>
+                        <div class="flex items-center justify-between p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">
+                            <div class="flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                                <span>Documents</span>
+                            </div>
+                            <span id="badgeDocCount" class="font-mono text-[10px] bg-emerald-500/20 px-1.5 py-0.5 rounded">0</span>
+                        </div>
+                        <div class="flex items-center justify-between p-1.5 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-300">
+                            <div class="flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-orange-400"></span>
+                                <span>Data / Config</span>
+                            </div>
+                            <span id="badgeDataCount" class="font-mono text-[10px] bg-orange-500/20 px-1.5 py-0.5 rounded">0</span>
+                        </div>
+                        <div class="flex items-center justify-between p-1.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-300">
+                            <div class="flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-rose-400"></span>
+                                <span>Archives & Zip</span>
+                            </div>
+                            <span id="badgeArchiveCount" class="font-mono text-[10px] bg-rose-500/20 px-1.5 py-0.5 rounded">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Extensions Breakdown -->
+                <div>
+                    <h3 class="text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-2.5">Top File Extensions</h3>
+                    <div id="extBreakdownList" class="space-y-1.5">
+                        <p class="text-slate-500 text-xs italic">No data yet</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Dropzone Container & Viewports -->
+        <div id="dropzoneArea" class="flex-1 relative w-full h-full bg-grid-pattern overflow-hidden">
+            
+            <!-- Floating Sidebar Expand Toggle (when sidebar collapsed) -->
+            <button id="expandSidebarBtn" class="hidden absolute top-4 left-4 z-30 p-2 glass-panel rounded-xl text-slate-400 hover:text-white shadow-xl">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+            </button>
+
+            <!-- 1. EMPTY STATE / DRAG & DROP HERO OVERLAY -->
+            <div id="emptyState" class="absolute inset-0 z-10 flex flex-col items-center justify-center p-6 text-center transition-all">
+                <div class="max-w-xl glass-panel p-8 sm:p-12 rounded-3xl border border-slate-800 shadow-2xl shadow-indigo-950/40 relative group hover:border-indigo-500/50 transition-all duration-300">
+                    <!-- Glowing Background Effect -->
+                    <div class="absolute -inset-1 bg-gradient-to-r from-emerald-500 via-indigo-500 to-cyan-500 rounded-3xl blur-xl opacity-25 group-hover:opacity-45 transition duration-500"></div>
+
+                    <div class="relative flex flex-col items-center">
+                        <div class="w-20 h-20 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mb-6 text-emerald-400 shadow-inner">
+                            <svg class="w-10 h-10 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"></path>
+                            </svg>
+                        </div>
+
+                        <h2 class="text-2xl font-bold text-white mb-2">เลือกโฟลเดอร์สำหรับ Mind Map & Disk Sync</h2>
+                        <p class="text-slate-400 text-sm mb-6 max-w-md">
+                            เชื่อมต่อโฟลเดอร์บนเครื่องจริงของคุณ เพื่อสร้างไฟล์/โฟลเดอร์ย่อย และแสดง Mind Map สวยงามแบบเรียลไทม์
+                        </p>
+
+                        <div class="flex flex-col sm:flex-row items-center gap-3">
+                            <button id="heroLiveSyncBtn" class="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-semibold text-sm shadow-lg shadow-emerald-500/25 transition-all transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                                เปิด Sync กับเครื่องจริง (Read/Write)
+                            </button>
+                            <button id="heroUploadBtn" class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 hover:border-slate-500 text-slate-300 font-medium text-sm transition-all">
+                                โหลดแบบดูอย่างเดียว
+                            </button>
+                            <button id="demoDataBtn" class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-200 font-medium text-sm transition-all">
+                                ตัวอย่าง Demo
+                            </button>
+                        </div>
+
+                        <div id="fsApiNotSupportedNotice" class="hidden mt-4 p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-300 text-left w-full">
+                            ⚠️ เบราว์เซอร์ของคุณไม่รองรับ File System Access API (แนะนำให้ใช้ Google Chrome, Microsoft Edge หรือ Brave สำหรับโหมด Sync เขียนข้อมูลจริงลงเครื่อง)
+                        </div>
+
+                        <div class="mt-8 pt-6 border-t border-slate-800/80 w-full flex items-center justify-center gap-6 text-xs text-slate-500">
+                            <span class="flex items-center gap-1.5">
+                                <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                100% Direct Disk Sync
+                            </span>
+                            <span class="flex items-center gap-1.5">
+                                <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                                Client-Side Privacy
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Drag Hover Overlay visual highlight -->
+            <div id="dragHoverOverlay" class="hidden absolute inset-0 z-40 bg-indigo-950/80 backdrop-blur-md border-4 border-dashed border-indigo-500 flex items-center justify-center">
+                <div class="text-center">
+                    <svg class="w-16 h-16 text-indigo-400 mx-auto animate-pulse mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                    <p class="text-2xl font-bold text-white">ปล่อยเพื่ออ่านโครงสร้างโฟลเดอร์ (Read-Only)</p>
+                </div>
+            </div>
+
+            <!-- 2. VIEWPORT: MIND MAP (SVG + Interactive Canvas) -->
+            <div id="mindmapContainer" class="w-full h-full relative cursor-grab active:cursor-grabbing no-select">
+                <svg id="mindmapSvg" class="w-full h-full">
+                    <defs>
+                        <!-- Dynamic Bezier line gradient -->
+                        <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stop-color="#6366f1" stop-opacity="0.6" />
+                            <stop offset="100%" stop-color="#06b6d4" stop-opacity="0.8" />
+                        </linearGradient>
+                        <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                            <feGaussianBlur stdDeviation="3" result="blur" />
+                            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                        </filter>
+                    </defs>
+                    <g id="viewportGroup">
+                        <!-- SVG dynamically rendered tree connectors and node chips -->
+                        <g id="linesLayer"></g>
+                        <g id="nodesLayer"></g>
+                    </g>
+                </svg>
+            </div>
+
+            <!-- 3. VIEWPORT: TREE LIST DIAGRAM VIEW -->
+            <div id="treeContainer" class="hidden w-full h-full overflow-y-auto p-6 text-slate-200">
+                <div class="max-w-4xl mx-auto glass-panel rounded-2xl p-6 border border-slate-800 shadow-xl">
+                    <div id="treeHeader" class="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs uppercase font-semibold text-slate-400">Directory Tree & Action View</span>
+                        </div>
+                        <div class="text-xs text-slate-500 font-mono" id="treePathNotice">Path: /</div>
+                    </div>
+                    <!-- Tree Root List Container -->
+                    <div id="treeContent" class="space-y-1 font-mono text-sm"></div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- CREATE FILE / FOLDER MODAL -->
+    <div id="createModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="w-full max-w-md glass-panel rounded-2xl border border-slate-800 shadow-2xl p-6 relative">
+            <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
+                <h3 id="createModalTitle" class="font-bold text-base text-slate-100 flex items-center gap-2">
+                    <span id="createModalIcon" class="text-emerald-400">➕</span>
+                    <span>สร้างรายการใหม่</span>
+                </h3>
+                <button id="closeCreateModal" class="text-slate-400 hover:text-white p-1">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <div class="space-y-4 text-xs">
+                <div>
+                    <label class="block text-slate-400 mb-1">ตำแหน่งโฟลเดอร์ปลายทาง (Target Parent):</label>
+                    <div id="createModalTargetPath" class="font-mono bg-slate-900 border border-slate-800 p-2.5 rounded-xl text-emerald-400 truncate">/</div>
+                </div>
+
+                <div>
+                    <label class="block text-slate-400 mb-1">ประเภทที่ต้องการสร้าง:</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button id="createTypeFileBtn" type="button" class="flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-indigo-500 bg-indigo-600/20 text-indigo-200 font-medium transition-all">
+                            📄 สร้างไฟล์ (File)
+                        </button>
+                        <button id="createTypeFolderBtn" type="button" class="flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 font-medium transition-all">
+                            📁 โฟลเดอร์ (Folder)
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-slate-400 mb-1" id="createModalNameLabel">ชื่อไฟล์ (ระบุนามสกุล เช่น script.js, index.html, notes.txt):</label>
+                    <input type="text" id="createModalInputName" placeholder="ระบุชื่อไฟล์..." class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 text-sm focus:outline-none focus:border-indigo-500 transition-colors">
+                </div>
+            </div>
+
+            <div class="mt-6 flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+                <button id="cancelCreateBtn" class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 text-xs font-medium border border-slate-800">ยกเลิก</button>
+                <button id="submitCreateBtn" class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/30">ยืนยันสร้างบนเครื่อง</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CONFIRM DELETE MODAL -->
+    <div id="deleteModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="w-full max-w-sm glass-panel rounded-2xl border border-rose-900/50 shadow-2xl p-6 relative">
+            <div class="flex items-center gap-3 mb-4 text-rose-400">
+                <div class="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center shrink-0">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                </div>
+                <div>
+                    <h3 class="font-bold text-slate-100 text-base">ยืนยันการลบรายการ</h3>
+                    <p class="text-slate-400 text-xs">Delete confirmation</p>
+                </div>
+            </div>
+
+            <p class="text-xs text-slate-300 mb-4 leading-relaxed">
+                คุณแน่ใจหรือไม่ว่าต้องการลบ <span id="deleteModalTargetName" class="font-bold font-mono text-rose-400">item</span> ?
+                <br><span id="deleteModalWarnSync" class="text-[11px] text-rose-400/80 block mt-1">⚠️ การลบในโหมด Sync จะลบไฟล์/โฟลเดอร์จากดิสก์เครื่องจริงอย่างถาวร!</span>
+            </p>
+
+            <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+                <button id="cancelDeleteBtn" class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 text-xs font-medium border border-slate-800">ยกเลิก</button>
+                <button id="confirmDeleteBtn" class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-lg shadow-rose-600/30">ยืนยันลบ</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ASCII Tree Copy Modal -->
+    <div id="asciiModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="w-full max-w-2xl glass-panel rounded-2xl border border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div class="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
+                <h3 class="font-bold text-sm text-slate-200 flex items-center gap-2">
+                    <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    ASCII Directory Structure
+                </h3>
+                <button id="closeAsciiModal" class="text-slate-400 hover:text-white p-1">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="p-4 flex-1 overflow-y-auto bg-slate-950 font-mono text-xs text-slate-300">
+                <pre id="asciiText" class="whitespace-pre select-all"></pre>
+            </div>
+            <div class="p-3 border-t border-slate-800 bg-slate-900/50 flex items-center justify-end gap-2">
+                <button id="copyAsciiBtn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs rounded-xl transition-all shadow-lg shadow-indigo-600/20">
+                    Copy to Clipboard
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="fixed bottom-6 right-6 z-50 transform translate-y-20 opacity-0 transition-all duration-300 glass-panel border border-indigo-500/40 text-slate-200 px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3">
+        <div id="toastIcon" class="text-emerald-400 shrink-0">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+        </div>
+        <span id="toastMsg" class="text-xs font-medium">Notification</span>
+    </div>
+
+    <!-- Application Script -->
+    <script>
+        /**
+         * Global Application State & Storage
+         */
+        const AppState = {
+            treeData: null,          // Root node of directory structure
+            rootHandle: null,        // Native FileSystemDirectoryHandle for real-time sync
+            isLiveSync: false,       // Mode: true = readwrite sync, false = read-only/demo
+            activeView: 'mindmap',   // 'mindmap' | 'tree'
+            searchQuery: '',
+            zoom: 1,
+            panX: 50,
+            panY: 50,
+            isDraggingPan: false,
+            panStart: { x: 0, y: 0 },
+            
+            // Context operation holders for modals
+            createContext: { targetNode: null, type: 'file' },
+            deleteContext: { targetNode: null, parentNode: null },
+
+            stats: {
+                totalFiles: 0,
+                totalFolders: 0,
+                totalSize: 0,
+                categories: { code: 0, media: 0, docs: 0, data: 0, archives: 0, folder: 0, other: 0 },
+                extensions: {}
+            }
+        };
+
+        // Extension category mapping rules
+        const EXTENSION_CATEGORIES = {
+            // Code & Scripts
+            js: 'code', ts: 'code', jsx: 'code', tsx: 'code', py: 'code', html: 'code', css: 'code',
+            scss: 'code', cpp: 'code', c: 'code', h: 'code', cs: 'code', java: 'code', rb: 'code',
+            php: 'code', go: 'code', rs: 'code', vue: 'code', svelte: 'code', sh: 'code', sql: 'code',
+            
+            // Images & Media
+            png: 'media', jpg: 'media', jpeg: 'media', gif: 'media', svg: 'media', webp: 'media',
+            ico: 'media', mp4: 'media', mp3: 'media', wav: 'media', mov: 'media', avi: 'media',
+            
+            // Documents
+            pdf: 'docs', md: 'docs', txt: 'docs', doc: 'docs', docx: 'docs', xls: 'docs', xlsx: 'docs',
+            ppt: 'docs', pptx: 'docs', epub: 'docs',
+            
+            // Data & Config
+            json: 'data', xml: 'data', yaml: 'data', yml: 'data', csv: 'data', env: 'data',
+            toml: 'data', lock: 'data', config: 'data',
+            
+            // Archives
+            zip: 'archives', tar: 'archives', gz: 'archives', '7z': 'archives', rar: 'archives', bz2: 'archives'
+        };
+
+        const CATEGORY_COLORS = {
+            folder: { stroke: '#f59e0b', fill: 'rgba(245, 158, 11, 0.15)', text: '#fbbf24', border: '#b45309' },
+            code: { stroke: '#06b6d4', fill: 'rgba(6, 182, 212, 0.15)', text: '#22d3ee', border: '#0e7490' },
+            media: { stroke: '#a855f7', fill: 'rgba(168, 85, 247, 0.15)', text: '#c084fc', border: '#7e22ce' },
+            docs: { stroke: '#10b981', fill: 'rgba(16, 185, 129, 0.15)', text: '#34d399', border: '#047857' },
+            data: { stroke: '#f97316', fill: 'rgba(249, 115, 22, 0.15)', text: '#fb923c', border: '#c2410c' },
+            archives: { stroke: '#f43f5e', fill: 'rgba(244, 63, 94, 0.15)', text: '#fb7185', border: '#be123c' },
+            other: { stroke: '#94a3b8', fill: 'rgba(148, 163, 184, 0.15)', text: '#cbd5e1', border: '#475569' }
+        };
+
+        // Element Selectors
+        const dropzoneArea = document.getElementById('dropzoneArea');
+        const dragHoverOverlay = document.getElementById('dragHoverOverlay');
+        const emptyState = document.getElementById('emptyState');
+        const openLiveSyncBtn = document.getElementById('openLiveSyncBtn');
+        const heroLiveSyncBtn = document.getElementById('heroLiveSyncBtn');
+        const fsApiNotSupportedNotice = document.getElementById('fsApiNotSupportedNotice');
+
+        const folderInput = document.getElementById('folderInput');
+        const selectFolderBtn = document.getElementById('selectFolderBtn');
+        const heroUploadBtn = document.getElementById('heroUploadBtn');
+        const demoDataBtn = document.getElementById('demoDataBtn');
+        const modeBadge = document.getElementById('modeBadge');
+
+        const viewMindmapBtn = document.getElementById('viewMindmapBtn');
+        const viewTreeBtn = document.getElementById('viewTreeBtn');
+        const mindmapContainer = document.getElementById('mindmapContainer');
+        const treeContainer = document.getElementById('treeContainer');
+
+        const mindmapSvg = document.getElementById('mindmapSvg');
+        const viewportGroup = document.getElementById('viewportGroup');
+        const linesLayer = document.getElementById('linesLayer');
+        const nodesLayer = document.getElementById('nodesLayer');
+        const treeContent = document.getElementById('treeContent');
+
+        const searchInput = document.getElementById('searchInput');
+        const clearSearchBtn = document.getElementById('clearSearchBtn');
+        const expandAllBtn = document.getElementById('expandAllBtn');
+        const collapseAllBtn = document.getElementById('collapseAllBtn');
+
+        const zoomInBtn = document.getElementById('zoomInBtn');
+        const zoomOutBtn = document.getElementById('zoomOutBtn');
+        const zoomFitBtn = document.getElementById('zoomFitBtn');
+        const zoomLabel = document.getElementById('zoomLabel');
+
+        const exportMenuBtn = document.getElementById('exportMenuBtn');
+        const exportDropdown = document.getElementById('exportDropdown');
+        const exportPngBtn = document.getElementById('exportPngBtn');
+        const exportSvgBtn = document.getElementById('exportSvgBtn');
+        const exportAsciiBtn = document.getElementById('exportAsciiBtn');
+        const exportJsonBtn = document.getElementById('exportJsonBtn');
+
+        // Modals
+        const createModal = document.getElementById('createModal');
+        const createModalTargetPath = document.getElementById('createModalTargetPath');
+        const createTypeFileBtn = document.getElementById('createTypeFileBtn');
+        const createTypeFolderBtn = document.getElementById('createTypeFolderBtn');
+        const createModalInputName = document.getElementById('createModalInputName');
+        const createModalNameLabel = document.getElementById('createModalNameLabel');
+        const submitCreateBtn = document.getElementById('submitCreateBtn');
+        const cancelCreateBtn = document.getElementById('cancelCreateBtn');
+        const closeCreateModal = document.getElementById('closeCreateModal');
+
+        const deleteModal = document.getElementById('deleteModal');
+        const deleteModalTargetName = document.getElementById('deleteModalTargetName');
+        const deleteModalWarnSync = document.getElementById('deleteModalWarnSync');
+        const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+        const cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
+
+        const asciiModal = document.getElementById('asciiModal');
+        const asciiText = document.getElementById('asciiText');
+        const copyAsciiBtn = document.getElementById('copyAsciiBtn');
+        const closeAsciiModal = document.getElementById('closeAsciiModal');
+
+        const statsSidebar = document.getElementById('statsSidebar');
+        const toggleSidebarBtn = document.getElementById('toggleSidebarBtn');
+        const expandSidebarBtn = document.getElementById('expandSidebarBtn');
+
+        // Initial setup
+        window.addEventListener('DOMContentLoaded', () => {
+            checkFileSystemApiSupport();
+            setupEventListeners();
+            setupPanZoom();
+            updateExportState();
+        });
+
+        function checkFileSystemApiSupport() {
+            if (!('showDirectoryPicker' in window)) {
+                fsApiNotSupportedNotice.classList.remove('hidden');
+            }
+        }
+
+        /* ==========================================================================
+           1. Directory Traversal & Native File System Access API (Read / Write Sync)
+           ========================================================================== */
+
+        function setupEventListeners() {
+            // Real-Time Disk Sync Button (File System Access API)
+            openLiveSyncBtn.addEventListener('click', handleOpenLiveSync);
+            heroLiveSyncBtn.addEventListener('click', handleOpenLiveSync);
+
+            // Read-Only Folder Input Fallback
+            selectFolderBtn.addEventListener('click', () => folderInput.click());
+            heroUploadBtn.addEventListener('click', () => folderInput.click());
+            folderInput.addEventListener('change', handleFileInputSelect);
+
+            // Drag and drop handlers (Read-Only mode)
+            window.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dragHoverOverlay.classList.remove('hidden');
+            });
+            window.addEventListener('dragleave', (e) => {
+                if (e.clientX <= 0 || e.clientY <= 0 || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight) {
+                    dragHoverOverlay.classList.add('hidden');
+                }
+            });
+            window.addEventListener('drop', handleFileDrop);
+
+            // Demo folder button
+            demoDataBtn.addEventListener('click', loadDemoData);
+
+            // View Mode Switching
+            viewMindmapBtn.addEventListener('click', () => switchView('mindmap'));
+            viewTreeBtn.addEventListener('click', () => switchView('tree'));
+
+            // Search Filter
+            searchInput.addEventListener('input', (e) => {
+                AppState.searchQuery = e.target.value.toLowerCase().trim();
+                clearSearchBtn.classList.toggle('hidden', !AppState.searchQuery);
+                renderActiveView();
+            });
+            clearSearchBtn.addEventListener('click', () => {
+                searchInput.value = '';
+                AppState.searchQuery = '';
+                clearSearchBtn.classList.add('hidden');
+                renderActiveView();
+            });
+
+            // Expand / Collapse All
+            expandAllBtn.addEventListener('click', () => toggleAllNodes(AppState.treeData, false));
+            collapseAllBtn.addEventListener('click', () => toggleAllNodes(AppState.treeData, true));
+
+            // Export Dropdown
+            exportMenuBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                exportDropdown.classList.toggle('hidden');
+            });
+            document.addEventListener('click', () => exportDropdown.classList.add('hidden'));
+
+            exportPngBtn.addEventListener('click', exportAsPNG);
+            exportSvgBtn.addEventListener('click', exportAsSVG);
+            exportAsciiBtn.addEventListener('click', openAsciiModal);
+            exportJsonBtn.addEventListener('click', exportAsJSON);
+
+            closeAsciiModal.addEventListener('click', () => asciiModal.classList.add('hidden'));
+            copyAsciiBtn.addEventListener('click', copyAsciiToClipboard);
+
+            // Create Modal listeners
+            createTypeFileBtn.addEventListener('click', () => setCreateType('file'));
+            createTypeFolderBtn.addEventListener('click', () => setCreateType('folder'));
+            cancelCreateBtn.addEventListener('click', () => createModal.classList.add('hidden'));
+            closeCreateModal.addEventListener('click', () => createModal.classList.add('hidden'));
+            submitCreateBtn.addEventListener('click', executeCreateEntry);
+
+            // Delete Modal listeners
+            cancelDeleteBtn.addEventListener('click', () => deleteModal.classList.add('hidden'));
+            confirmDeleteBtn.addEventListener('click', executeDeleteEntry);
+
+            // Sidebar toggle
+            toggleSidebarBtn.addEventListener('click', () => {
+                statsSidebar.classList.add('-ml-64');
+                expandSidebarBtn.classList.remove('hidden');
+            });
+            expandSidebarBtn.addEventListener('click', () => {
+                statsSidebar.classList.remove('-ml-64');
+                expandSidebarBtn.classList.add('hidden');
+            });
+        }
+
+        /**
+         * Open Directory with ReadWrite mode via Native File System Access API
+         */
+        async function handleOpenLiveSync() {
+            if (!('showDirectoryPicker' in window)) {
+                showToast("เบราว์เซอร์นี้ไม่รองรับ File System Sync โปรดใช้ Chrome หรือ Edge", "error");
+                return;
+            }
+
+            try {
+                const rootHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+                showToast(`กำลังโหลดโฟลเดอร์ "${rootHandle.name}" แบบ Sync เครื่องจริง...`, "info");
+
+                AppState.rootHandle = rootHandle;
+                AppState.isLiveSync = true;
+
+                const rootNode = await parseFileSystemHandle(rootHandle);
+                processTreeData(rootNode, true);
+                updateModeBadge('live');
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    showToast(`เกิดข้อผิดพลาด: ${err.message}`, "error");
+                }
+            }
+        }
+
+        /**
+         * Recursive File System Access API Handle Reader
+         */
+        async function parseFileSystemHandle(handle, path = '') {
+            const isDirectory = handle.kind === 'directory';
+            const fullPath = path ? `${path}/${handle.name}` : handle.name;
+
+            if (isDirectory) {
+                const children = [];
+                try {
+                    for await (const entry of handle.values()) {
+                        const childNode = await parseFileSystemHandle(entry, fullPath);
+                        if (childNode) {
+                            childNode.parentHandle = handle;
+                            children.push(childNode);
+                        }
+                    }
+                } catch (e) {
+                    console.warn(`Could not read directory ${handle.name}`, e);
+                }
+
+                return {
+                    name: handle.name,
+                    type: 'directory',
+                    path: fullPath,
+                    handle: handle,
+                    children: children,
+                    collapsed: false
+                };
+            } else {
+                let fileSize = 0;
+                try {
+                    const file = await handle.getFile();
+                    fileSize = file.size;
+                } catch (e) {}
+
+                const ext = getExtension(handle.name);
+                const cat = getCategory(ext);
+
+                return {
+                    name: handle.name,
+                    type: 'file',
+                    size: fileSize,
+                    extension: ext,
+                    category: cat,
+                    path: fullPath,
+                    handle: handle,
+                    collapsed: false
+                };
+            }
+        }
+
+        /**
+         * Reload directory tree from disk preserving zoom/pan
+         */
+        async function refreshDirectoryTree() {
+            if (AppState.isLiveSync && AppState.rootHandle) {
+                const updatedTree = await parseFileSystemHandle(AppState.rootHandle);
+                processTreeData(updatedTree, false); // false = keep zoom/pan
+            } else if (AppState.treeData) {
+                processTreeData(AppState.treeData, false);
+            }
+        }
+
+        // Handle Drag & Drop Dropzone (Read-Only)
+        async function handleFileDrop(e) {
+            e.preventDefault();
+            dragHoverOverlay.classList.add('hidden');
+
+            const items = e.dataTransfer.items;
+            if (!items || items.length === 0) return;
+
+            showToast("Reading directory structure (Read-Only)...", "info");
+            AppState.isLiveSync = false;
+            AppState.rootHandle = null;
+
+            const entries = [];
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                if (item.kind === 'file') {
+                    const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+                    if (entry) entries.push(entry);
+                }
+            }
+
+            if (entries.length === 0) return;
+
+            if (entries.length === 1 && entries[0].isDirectory) {
+                const rootNode = await parseFileSystemEntry(entries[0]);
+                processTreeData(rootNode, true);
+            } else {
+                const childrenPromises = entries.map(entry => parseFileSystemEntry(entry));
+                const children = await Promise.all(childrenPromises);
+                const rootNode = {
+                    name: 'Project Root',
+                    type: 'directory',
+                    path: 'Project Root',
+                    children: children.filter(Boolean),
+                    collapsed: false
+                };
+                processTreeData(rootNode, true);
+            }
+            updateModeBadge('readonly');
+        }
+
+        // Handle Fallback Directory File Selector
+        function handleFileInputSelect(e) {
+            const files = e.target.files;
+            if (!files || files.length === 0) return;
+
+            showToast("Parsing selected directory (Read-Only)...", "info");
+            AppState.isLiveSync = false;
+            AppState.rootHandle = null;
+
+            const rootMap = {};
+            let rootName = "Root";
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const relPath = file.webkitRelativePath || file.name;
+                const parts = relPath.split('/');
+                if (parts.length > 0) rootName = parts[0];
+
+                let currentLevel = rootMap;
+                for (let p = 0; p < parts.length; p++) {
+                    const part = parts[p];
+                    const isLast = (p === parts.length - 1);
+
+                    if (!currentLevel[part]) {
+                        if (isLast) {
+                            currentLevel[part] = {
+                                name: part,
+                                type: 'file',
+                                size: file.size,
+                                path: relPath
+                            };
+                        } else {
+                            currentLevel[part] = {
+                                __dirInfo: {
+                                    name: part,
+                                    type: 'directory',
+                                    path: parts.slice(0, p + 1).join('/'),
+                                    childrenMap: {}
+                                }
+                            };
+                        }
+                    }
+
+                    if (!isLast) {
+                        currentLevel = currentLevel[part].__dirInfo.childrenMap;
+                    }
+                }
+            }
+
+            function convertMapToTree(map, dirName, dirPath) {
+                const children = [];
+                for (const key in map) {
+                    if (key === '__dirInfo') continue;
+                    const item = map[key];
+                    if (item.type === 'file') {
+                        children.push({ ...item, collapsed: false });
+                    } else if (item.__dirInfo) {
+                        const childTree = convertMapToTree(item.__dirInfo.childrenMap, item.__dirInfo.name, item.__dirInfo.path);
+                        children.push(childTree);
+                    }
+                }
+                return {
+                    name: dirName,
+                    type: 'directory',
+                    path: dirPath,
+                    children: children,
+                    collapsed: false
+                };
+            }
+
+            const tree = convertMapToTree(rootMap, rootName, rootName);
+            processTreeData(tree, true);
+            updateModeBadge('readonly');
+        }
+
+        // Recursive Entry Reader using webkitGetAsEntry
+        function parseFileSystemEntry(entry, path = '') {
+            return new Promise((resolve) => {
+                const fullPath = path ? `${path}/${entry.name}` : entry.name;
+                
+                if (entry.isFile) {
+                    entry.file((file) => {
+                        const ext = getExtension(entry.name);
+                        const cat = getCategory(ext);
+                        resolve({
+                            name: entry.name,
+                            type: 'file',
+                            size: file.size,
+                            extension: ext,
+                            category: cat,
+                            path: fullPath,
+                            collapsed: false
+                        });
+                    }, () => resolve(null));
+                } else if (entry.isDirectory) {
+                    const dirReader = entry.createReader();
+                    const entriesList = [];
+
+                    const readBatch = () => {
+                        dirReader.readEntries(async (batch) => {
+                            if (batch.length === 0) {
+                                const childPromises = entriesList.map(e => parseFileSystemEntry(e, fullPath));
+                                const children = await Promise.all(childPromises);
+                                resolve({
+                                    name: entry.name,
+                                    type: 'directory',
+                                    path: fullPath,
+                                    children: children.filter(Boolean),
+                                    collapsed: false
+                                });
+                            } else {
+                                entriesList.push(...batch);
+                                readBatch();
+                            }
+                        }, () => resolve(null));
+                    };
+                    readBatch();
+                } else {
+                    resolve(null);
+                }
+            });
+        }
+
+        /* ==========================================================================
+           2. Create & Delete Entry Logic (Real Disk Write & Virtual Fallback)
+           ========================================================================== */
+
+        function openCreateModal(targetFolderNode, defaultType = 'file') {
+            AppState.createContext.targetNode = targetFolderNode;
+            createModalTargetPath.textContent = targetFolderNode.path;
+            createModalInputName.value = '';
+            setCreateType(defaultType);
+            createModal.classList.remove('hidden');
+            setTimeout(() => createModalInputName.focus(), 50);
+        }
+
+        function setCreateType(type) {
+            AppState.createContext.type = type;
+            if (type === 'file') {
+                createTypeFileBtn.className = "flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-indigo-500 bg-indigo-600/20 text-indigo-200 font-medium transition-all shadow-sm";
+                createTypeFolderBtn.className = "flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 font-medium transition-all";
+                createModalNameLabel.textContent = "ชื่อไฟล์ (ระบุนามสกุล เช่น script.js, index.html, notes.txt):";
+                createModalInputName.placeholder = "script.js";
+            } else {
+                createTypeFolderBtn.className = "flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-amber-500 bg-amber-500/20 text-amber-200 font-medium transition-all shadow-sm";
+                createTypeFileBtn.className = "flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 font-medium transition-all";
+                createModalNameLabel.textContent = "ชื่อโฟลเดอร์ใหม่ (เช่น components, utils, assets):";
+                createModalInputName.placeholder = "components";
+            }
+        }
+
+        async function executeCreateEntry() {
+            const name = createModalInputName.value.trim();
+            const parentNode = AppState.createContext.targetNode;
+            const type = AppState.createContext.type;
+
+            if (!name) {
+                showToast("โปรดระบุชื่อไฟล์หรือโฟลเดอร์", "error");
+                return;
+            }
+
+            createModal.classList.add('hidden');
+
+            if (AppState.isLiveSync && parentNode.handle) {
+                try {
+                    if (type === 'file') {
+                        await parentNode.handle.getFileHandle(name, { create: true });
+                        showToast(`สร้างไฟล์ "${name}" ลงในเครื่องจริงแล้ว`, "success");
+                    } else {
+                        await parentNode.handle.getDirectoryHandle(name, { create: true });
+                        showToast(`สร้างโฟลเดอร์ "${name}" ลงในเครื่องจริงแล้ว`, "success");
+                    }
+                    await refreshDirectoryTree();
+                } catch (err) {
+                    showToast(`ล้มเหลวในการสร้างลงเครื่อง: ${err.message}`, "error");
+                }
+            } else {
+                // In-Memory Virtual creation fallback
+                const ext = type === 'file' ? getExtension(name) : '';
+                const newNode = {
+                    name: name,
+                    type: type,
+                    path: `${parentNode.path}/${name}`,
+                    collapsed: false,
+                    ...(type === 'file' ? { size: 0, extension: ext, category: getCategory(ext) } : { children: [], category: 'folder' })
+                };
+                if (!parentNode.children) parentNode.children = [];
+                parentNode.children.push(newNode);
+
+                processTreeData(AppState.treeData, false);
+                showToast(`สร้าง ${type === 'file' ? 'ไฟล์' : 'โฟลเดอร์'} "${name}" (ในระบบจำลอง)`, "info");
+            }
+        }
+
+        function openDeleteModal(targetNode, parentNode) {
+            AppState.deleteContext.targetNode = targetNode;
+            AppState.deleteContext.parentNode = parentNode;
+            deleteModalTargetName.textContent = targetNode.name;
+            deleteModalWarnSync.classList.toggle('hidden', !AppState.isLiveSync);
+            deleteModal.classList.remove('hidden');
+        }
+
+        async function executeDeleteEntry() {
+            const targetNode = AppState.deleteContext.targetNode;
+            const parentNode = AppState.deleteContext.parentNode;
+            deleteModal.classList.add('hidden');
+
+            if (!targetNode || !parentNode) return;
+
+            if (AppState.isLiveSync && parentNode.handle) {
+                try {
+                    await parentNode.handle.removeEntry(targetNode.name, { recursive: targetNode.type === 'directory' });
+                    showToast(`ลบ "${targetNode.name}" ออกจากดิสก์เครื่องจริงเรียบร้อยแล้ว`, "success");
+                    await refreshDirectoryTree();
+                } catch (err) {
+                    showToast(`เกิดข้อผิดพลาดในการลบ: ${err.message}`, "error");
+                }
+            } else {
+                // Virtual in-memory removal fallback
+                if (parentNode.children) {
+                    parentNode.children = parentNode.children.filter(c => c !== targetNode);
+                    processTreeData(AppState.treeData, false);
+                    showToast(`ลบ "${targetNode.name}" (ในระบบจำลอง)`, "info");
+                }
+            }
+        }
+
+        /* ==========================================================================
+           3. Data Processing, Categorization & Statistics
+           ========================================================================== */
+
+        function processTreeData(rootNode, resetZoom = true) {
+            if (!rootNode) return;
+
+            // Reset Stats
+            AppState.stats = {
+                totalFiles: 0,
+                totalFolders: 0,
+                totalSize: 0,
+                categories: { code: 0, media: 0, docs: 0, data: 0, archives: 0, folder: 0, other: 0 },
+                extensions: {}
+            };
+
+            function calculateStats(node) {
+                if (node.type === 'directory') {
+                    AppState.stats.totalFolders++;
+                    AppState.stats.categories.folder++;
+                    node.category = 'folder';
+                    if (node.children) {
+                        node.children.sort((a, b) => {
+                            if (a.type === b.type) return a.name.localeCompare(b.name);
+                            return a.type === 'directory' ? -1 : 1;
+                        });
+                        node.children.forEach(calculateStats);
+                    }
+                } else {
+                    AppState.stats.totalFiles++;
+                    AppState.stats.totalSize += (node.size || 0);
+                    
+                    const ext = getExtension(node.name);
+                    const cat = getCategory(ext);
+                    node.extension = ext;
+                    node.category = cat;
+
+                    AppState.stats.categories[cat] = (AppState.stats.categories[cat] || 0) + 1;
+                    if (ext) {
+                        AppState.stats.extensions[ext] = (AppState.stats.extensions[ext] || 0) + 1;
+                    }
+                }
+            }
+
+            calculateStats(rootNode);
+            AppState.treeData = rootNode;
+
+            updateSidebarStats();
+            emptyState.classList.add('hidden');
+            updateExportState();
+
+            if (resetZoom) {
+                resetPanZoom();
+            }
+
+            renderActiveView();
+        }
+
+        function updateModeBadge(mode) {
+            if (mode === 'live') {
+                modeBadge.className = "flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/30";
+                modeBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> 🟢 Real-Time Disk Sync (Read/Write)`;
+            } else if (mode === 'readonly') {
+                modeBadge.className = "flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-500/10 text-amber-300 border border-amber-500/30";
+                modeBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400"></span> 🟡 ดูอย่างเดียว (Read-Only)`;
+            } else {
+                modeBadge.className = "flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-indigo-500/10 text-indigo-300 border border-indigo-500/30";
+                modeBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-indigo-400"></span> 🔵 Demo Mode`;
+            }
+        }
+
+        function getExtension(filename) {
+            const parts = filename.split('.');
+            if (parts.length < 2 || (parts.length === 2 && parts[0] === '')) return '';
+            return parts.pop().toLowerCase();
+        }
+
+        function getCategory(ext) {
+            if (!ext) return 'other';
+            return EXTENSION_CATEGORIES[ext] || 'other';
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+
+        function updateSidebarStats() {
+            document.getElementById('statRootName').textContent = AppState.treeData.name;
+            document.getElementById('statSummary').textContent = `${AppState.stats.totalFiles} files, ${AppState.stats.totalFolders} folders`;
+
+            document.getElementById('statFilesCount').textContent = AppState.stats.totalFiles.toLocaleString();
+            document.getElementById('statFoldersCount').textContent = AppState.stats.totalFolders.toLocaleString();
+            document.getElementById('statTotalSize').textContent = formatBytes(AppState.stats.totalSize);
+
+            document.getElementById('badgeFolderCount').textContent = AppState.stats.categories.folder;
+            document.getElementById('badgeCodeCount').textContent = AppState.stats.categories.code;
+            document.getElementById('badgeMediaCount').textContent = AppState.stats.categories.media;
+            document.getElementById('badgeDocCount').textContent = AppState.stats.categories.docs;
+            document.getElementById('badgeDataCount').textContent = AppState.stats.categories.data;
+            document.getElementById('badgeArchiveCount').textContent = AppState.stats.categories.archives;
+
+            const extList = document.getElementById('extBreakdownList');
+            extList.innerHTML = '';
+            const sortedExts = Object.entries(AppState.stats.extensions)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 7);
+
+            if (sortedExts.length === 0) {
+                extList.innerHTML = '<p class="text-slate-500 text-xs italic">No extensions found</p>';
+                return;
+            }
+
+            sortedExts.forEach(([ext, count]) => {
+                const cat = getCategory(ext);
+                const col = CATEGORY_COLORS[cat];
+                const item = document.createElement('div');
+                item.className = 'flex items-center justify-between text-xs py-1 px-2 rounded-lg bg-slate-900/40 border border-slate-800/80';
+                item.innerHTML = `
+                    <span class="font-mono text-slate-300 flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full" style="background:${col.stroke}"></span>
+                        .${ext}
+                    </span>
+                    <span class="font-mono text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded">${count}</span>
+                `;
+                extList.appendChild(item);
+            });
+        }
+
+        /* ==========================================================================
+           4. View Switcher & Rendering
+           ========================================================================== */
+
+        function switchView(view) {
+            AppState.activeView = view;
+            if (view === 'mindmap') {
+                viewMindmapBtn.className = 'flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all text-white bg-indigo-600 shadow-md';
+                viewTreeBtn.className = 'flex items-center gap-2 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 transition-all';
+                mindmapContainer.classList.remove('hidden');
+                treeContainer.classList.add('hidden');
+                document.getElementById('mindmapControls').classList.remove('hidden');
+            } else {
+                viewTreeBtn.className = 'flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all text-white bg-indigo-600 shadow-md';
+                viewMindmapBtn.className = 'flex items-center gap-2 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 transition-all';
+                treeContainer.classList.remove('hidden');
+                mindmapContainer.classList.add('hidden');
+                document.getElementById('mindmapControls').classList.add('hidden');
+            }
+            renderActiveView();
+        }
+
+        function renderActiveView() {
+            if (!AppState.treeData) return;
+
+            if (AppState.activeView === 'mindmap') {
+                renderMindmapView();
+            } else {
+                renderTreeView();
+            }
+        }
+
+        function toggleAllNodes(node, collapseState) {
+            if (!node) return;
+            if (node.type === 'directory') {
+                node.collapsed = collapseState;
+                if (node.children) {
+                    node.children.forEach(c => toggleAllNodes(c, collapseState));
+                }
+            }
+            renderActiveView();
+        }
+
+        /* ==========================================================================
+           5. Mind Map SVG Renderer (Interactive Action Buttons for Adding & Deleting)
+           ========================================================================== */
+
+        function renderMindmapView() {
+            linesLayer.innerHTML = '';
+            nodesLayer.innerHTML = '';
+
+            if (!AppState.treeData) return;
+
+            function matchesFilter(node) {
+                if (!AppState.searchQuery) return true;
+                const matchSelf = node.name.toLowerCase().includes(AppState.searchQuery) || 
+                                  (node.extension && node.extension.includes(AppState.searchQuery));
+                if (matchSelf) return true;
+                if (node.children) {
+                    return node.children.some(c => matchesFilter(c));
+                }
+                return false;
+            }
+
+            const HORIZONTAL_GAP = 230;
+            const VERTICAL_GAP = 48;
+            let currentLeafY = 0;
+
+            function layoutTree(node, depth = 0, parentNode = null) {
+                if (!matchesFilter(node)) return null;
+
+                const isVisibleDir = node.type === 'directory' && !node.collapsed;
+                const filteredChildren = (node.children && isVisibleDir) 
+                    ? node.children.map(c => layoutTree(c, depth + 1, node)).filter(Boolean)
+                    : [];
+
+                let y = 0;
+                if (filteredChildren.length === 0) {
+                    y = currentLeafY;
+                    currentLeafY += VERTICAL_GAP;
+                } else {
+                    const firstY = filteredChildren[0].y;
+                    const lastY = filteredChildren[filteredChildren.length - 1].y;
+                    y = (firstY + lastY) / 2;
+                }
+
+                return {
+                    data: node,
+                    parentNode: parentNode,
+                    x: depth * HORIZONTAL_GAP,
+                    y: y,
+                    depth: depth,
+                    children: filteredChildren
+                };
+            }
+
+            currentLeafY = 0;
+            const layoutRoot = layoutTree(AppState.treeData, 0, null);
+            if (!layoutRoot) return;
+
+            const totalHeight = currentLeafY;
+            const startY = 300 - totalHeight / 2;
+
+            function adjustY(node) {
+                node.y += startY;
+                node.children.forEach(adjustY);
+            }
+            adjustY(layoutRoot);
+
+            function drawNodeAndLinks(node) {
+                const nodeCat = node.data.category || (node.data.type === 'directory' ? 'folder' : 'other');
+                const colors = CATEGORY_COLORS[nodeCat] || CATEGORY_COLORS.other;
+
+                // Render Connectors
+                node.children.forEach(child => {
+                    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    const startX = node.x + 160;
+                    const startY = node.y;
+                    const endX = child.x;
+                    const endY = child.y;
+                    const dx = (endX - startX) * 0.5;
+
+                    const d = `M ${startX} ${startY} C ${startX + dx} ${startY}, ${endX - dx} ${endY}, ${endX} ${endY}`;
+                    path.setAttribute('d', d);
+                    path.setAttribute('fill', 'none');
+                    path.setAttribute('stroke', colors.stroke);
+                    path.setAttribute('stroke-width', '2');
+                    path.setAttribute('stroke-opacity', '0.6');
+                    path.setAttribute('class', 'connection-line');
+                    linesLayer.appendChild(path);
+
+                    drawNodeAndLinks(child);
+                });
+
+                // Node Group (<g>)
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.setAttribute('transform', `translate(${node.x}, ${node.y - 18})`);
+                g.setAttribute('class', 'mindmap-node');
+
+                // Main Node Box
+                const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                rect.setAttribute('width', '160');
+                rect.setAttribute('height', '36');
+                rect.setAttribute('rx', '10');
+                rect.setAttribute('fill', '#111726');
+                rect.setAttribute('stroke', colors.stroke);
+                rect.setAttribute('stroke-width', '1.5');
+                rect.setAttribute('stroke-opacity', '0.85');
+
+                if (AppState.searchQuery && node.data.name.toLowerCase().includes(AppState.searchQuery)) {
+                    rect.setAttribute('stroke', '#38bdf8');
+                    rect.setAttribute('stroke-width', '2.5');
+                    rect.setAttribute('filter', 'url(#glow)');
+                }
+
+                g.appendChild(rect);
+
+                // Category Dot
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', '14');
+                circle.setAttribute('cy', '18');
+                circle.setAttribute('r', '4.5');
+                circle.setAttribute('fill', colors.stroke);
+                g.appendChild(circle);
+
+                // Title Text
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', '25');
+                text.setAttribute('y', '22');
+                text.setAttribute('fill', '#e2e8f0');
+                text.setAttribute('font-size', '11');
+                text.setAttribute('font-weight', node.data.type === 'directory' ? '600' : '400');
+
+                let displayName = node.data.name;
+                if (displayName.length > 13) {
+                    displayName = displayName.substring(0, 11) + '..';
+                }
+                text.textContent = displayName;
+                g.appendChild(text);
+
+                // ACTION BUTTONS GROUP (Add File, Add Folder, Delete)
+                const actionsGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                actionsGroup.setAttribute('transform', 'translate(100, 8)');
+
+                if (node.data.type === 'directory') {
+                    // Button 1: Add File (+)
+                    const addFileBtn = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                    addFileBtn.setAttribute('class', 'node-action-btn');
+                    addFileBtn.innerHTML = `
+                        <circle cx="9" cy="10" r="7.5" fill="#1e293b" stroke="#06b6d4" stroke-width="1"/>
+                        <text x="9" y="13.5" text-anchor="middle" fill="#22d3ee" font-size="10" font-weight="bold">+</text>
+                    `;
+                    addFileBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        openCreateModal(node.data, 'file');
+                    });
+                    actionsGroup.appendChild(addFileBtn);
+
+                    // Button 2: Add Folder (📁)
+                    const addDirBtn = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                    addDirBtn.setAttribute('transform', 'translate(18, 0)');
+                    addDirBtn.setAttribute('class', 'node-action-btn');
+                    addDirBtn.innerHTML = `
+                        <circle cx="9" cy="10" r="7.5" fill="#1e293b" stroke="#f59e0b" stroke-width="1"/>
+                        <text x="9" y="13" text-anchor="middle" fill="#fbbf24" font-size="8">📁</text>
+                    `;
+                    addDirBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        openCreateModal(node.data, 'folder');
+                    });
+                    actionsGroup.appendChild(addDirBtn);
+                }
+
+                // Delete Button (🗑️) - only for non-root nodes
+                if (node.parentNode) {
+                    const deleteBtn = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                    deleteBtn.setAttribute('transform', node.data.type === 'directory' ? 'translate(36, 0)' : 'translate(36, 0)');
+                    deleteBtn.setAttribute('class', 'node-action-btn');
+                    deleteBtn.innerHTML = `
+                        <circle cx="9" cy="10" r="7.5" fill="#1e293b" stroke="#f43f5e" stroke-width="1"/>
+                        <text x="9" y="13" text-anchor="middle" fill="#fb7185" font-size="8">✕</text>
+                    `;
+                    deleteBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        openDeleteModal(node.data, node.parentNode.data);
+                    });
+                    actionsGroup.appendChild(deleteBtn);
+                }
+
+                g.appendChild(actionsGroup);
+
+                // Expand / Collapse Badge for Directory Nodes
+                if (node.data.type === 'directory' && node.data.children && node.data.children.length > 0) {
+                    const toggleBtn = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                    toggleBtn.setAttribute('transform', 'translate(154, 11)');
+                    toggleBtn.setAttribute('class', 'cursor-pointer');
+
+                    const toggleCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    toggleCircle.setAttribute('cx', '7');
+                    toggleCircle.setAttribute('cy', '7');
+                    toggleCircle.setAttribute('r', '7');
+                    toggleCircle.setAttribute('fill', '#1e293b');
+                    toggleCircle.setAttribute('stroke', colors.stroke);
+                    toggleCircle.setAttribute('stroke-width', '1');
+
+                    const toggleText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    toggleText.setAttribute('x', '7');
+                    toggleText.setAttribute('y', '10.5');
+                    toggleText.setAttribute('text-anchor', 'middle');
+                    toggleText.setAttribute('fill', '#ffffff');
+                    toggleText.setAttribute('font-size', '10');
+                    toggleText.setAttribute('font-weight', 'bold');
+                    toggleText.textContent = node.data.collapsed ? '+' : '−';
+
+                    toggleBtn.appendChild(toggleCircle);
+                    toggleBtn.appendChild(toggleText);
+
+                    toggleBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        node.data.collapsed = !node.data.collapsed;
+                        renderMindmapView();
+                    });
+
+                    g.appendChild(toggleBtn);
+                }
+
+                // Click node handler
+                g.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (node.data.type === 'directory') {
+                        node.data.collapsed = !node.data.collapsed;
+                        renderMindmapView();
+                    } else {
+                        showToast(`File: ${node.data.path} (${formatBytes(node.data.size)})`, 'info');
+                    }
+                });
+
+                nodesLayer.appendChild(g);
+            }
+
+            drawNodeAndLinks(layoutRoot);
+            updateViewportTransform();
+        }
+
+        /* ==========================================================================
+           6. Tree View Diagram Engine (With Direct Interactive Controls)
+           ========================================================================== */
+
+        function renderTreeView() {
+            treeContent.innerHTML = '';
+            if (!AppState.treeData) return;
+
+            document.getElementById('treePathNotice').textContent = `Path: ${AppState.treeData.path}`;
+
+            function matchesFilter(node) {
+                if (!AppState.searchQuery) return true;
+                const matchSelf = node.name.toLowerCase().includes(AppState.searchQuery) || 
+                                  (node.extension && node.extension.includes(AppState.searchQuery));
+                if (matchSelf) return true;
+                if (node.children) {
+                    return node.children.some(c => matchesFilter(c));
+                }
+                return false;
+            }
+
+            function buildTreeDOM(node, depth = 0, parentNode = null) {
+                if (!matchesFilter(node)) return null;
+
+                const wrapper = document.createElement('div');
+                wrapper.className = 'select-none';
+
+                const row = document.createElement('div');
+                const cat = node.category || (node.type === 'directory' ? 'folder' : 'other');
+                const col = CATEGORY_COLORS[cat];
+                const isSearchMatch = AppState.searchQuery && node.name.toLowerCase().includes(AppState.searchQuery);
+
+                row.className = `tree-row flex items-center justify-between py-1.5 px-2 rounded-lg cursor-pointer my-0.5 border ${
+                    isSearchMatch ? 'border-cyan-500 bg-cyan-950/30' : 'border-transparent hover:border-slate-800'
+                }`;
+                row.style.paddingLeft = `${depth * 20 + 8}px`;
+
+                // Left Section: Icon + Name
+                const leftPart = document.createElement('div');
+                leftPart.className = 'flex items-center gap-2 overflow-hidden mr-2';
+
+                if (node.type === 'directory') {
+                    const arrow = document.createElement('span');
+                    arrow.className = `text-slate-400 text-xs transition-transform duration-200 ${node.collapsed ? '' : 'rotate-90'}`;
+                    arrow.innerHTML = '▶';
+                    leftPart.appendChild(arrow);
+                } else {
+                    const spacer = document.createElement('span');
+                    spacer.className = 'w-3';
+                    leftPart.appendChild(spacer);
+                }
+
+                const iconSvg = getIconSvgForCategory(cat);
+                const iconSpan = document.createElement('span');
+                iconSpan.style.color = col.stroke;
+                iconSpan.innerHTML = iconSvg;
+                leftPart.appendChild(iconSpan);
+
+                const nameSpan = document.createElement('span');
+                nameSpan.className = `truncate ${node.type === 'directory' ? 'font-semibold text-slate-200' : 'text-slate-300'}`;
+                nameSpan.textContent = node.name;
+                leftPart.appendChild(nameSpan);
+
+                row.appendChild(leftPart);
+
+                // Right Section: Size & Quick Action Buttons
+                const rightPart = document.createElement('div');
+                rightPart.className = 'flex items-center gap-1 shrink-0 font-mono text-xs';
+
+                if (node.type === 'directory') {
+                    const count = node.children ? node.children.length : 0;
+                    rightPart.innerHTML += `<span class="bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full text-[10px] mr-1">${count} items</span>`;
+
+                    // Add File Button
+                    const addFileBtn = document.createElement('button');
+                    addFileBtn.className = "p-1 hover:bg-cyan-500/20 text-cyan-400 rounded transition-colors";
+                    addFileBtn.title = "สร้างไฟล์ใหม่ในโฟลเดอร์นี้";
+                    addFileBtn.innerHTML = `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>`;
+                    addFileBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        openCreateModal(node, 'file');
+                    });
+                    rightPart.appendChild(addFileBtn);
+
+                    // Add Subfolder Button
+                    const addDirBtn = document.createElement('button');
+                    addDirBtn.className = "p-1 hover:bg-amber-500/20 text-amber-400 rounded transition-colors";
+                    addDirBtn.title = "สร้างโฟลเดอร์ย่อย";
+                    addDirBtn.innerHTML = `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"></path></svg>`;
+                    addDirBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        openCreateModal(node, 'folder');
+                    });
+                    rightPart.appendChild(addDirBtn);
+                } else {
+                    rightPart.innerHTML += `<span class="text-slate-500 text-[11px] mr-2">${formatBytes(node.size || 0)}</span>`;
+                }
+
+                // Delete Button
+                if (parentNode) {
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.className = "p-1 hover:bg-rose-500/20 text-rose-400 rounded transition-colors";
+                    deleteBtn.title = "ลบรายการนี้";
+                    deleteBtn.innerHTML = `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>`;
+                    deleteBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        openDeleteModal(node, parentNode);
+                    });
+                    rightPart.appendChild(deleteBtn);
+                }
+
+                row.appendChild(rightPart);
+
+                row.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (node.type === 'directory') {
+                        node.collapsed = !node.collapsed;
+                        renderTreeView();
+                    } else {
+                        showToast(`Copied path: ${node.path}`, 'success');
+                        navigator.clipboard.writeText(node.path);
+                    }
+                });
+
+                wrapper.appendChild(row);
+
+                if (node.type === 'directory' && !node.collapsed && node.children) {
+                    const childrenContainer = document.createElement('div');
+                    childrenContainer.className = 'border-l border-slate-800/80 ml-4';
+                    node.children.forEach(child => {
+                        const childEl = buildTreeDOM(child, depth + 1, node);
+                        if (childEl) childrenContainer.appendChild(childEl);
+                    });
+                    wrapper.appendChild(childrenContainer);
+                }
+
+                return wrapper;
+            }
+
+            const treeDOM = buildTreeDOM(AppState.treeData, 0, null);
+            if (treeDOM) treeContent.appendChild(treeDOM);
+        }
+
+        function getIconSvgForCategory(category) {
+            switch (category) {
+                case 'folder':
+                    return `<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"></path></svg>`;
+                case 'code':
+                    return `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>`;
+                case 'media':
+                    return `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>`;
+                case 'docs':
+                    return `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>`;
+                case 'data':
+                    return `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2 1.5 3 3.5 3h9c2 0 3.5-1 3.5-3V7c0-2-1.5-3-3.5-3h-9C5.5 4 4 5 4 7z"></path></svg>`;
+                case 'archives':
+                    return `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v1a2 2 0 01-2 2M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path></svg>`;
+                default:
+                    return `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>`;
+            }
+        }
+
+        /* ==========================================================================
+           7. Pan & Zoom Engine for SVG Mind Map
+           ========================================================================== */
+
+        function setupPanZoom() {
+            mindmapContainer.addEventListener('mousedown', (e) => {
+                AppState.isDraggingPan = true;
+                AppState.panStart = { x: e.clientX - AppState.panX, y: e.clientY - AppState.panY };
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!AppState.isDraggingPan) return;
+                AppState.panX = e.clientX - AppState.panStart.x;
+                AppState.panY = e.clientY - AppState.panStart.y;
+                updateViewportTransform();
+            });
+
+            window.addEventListener('mouseup', () => {
+                AppState.isDraggingPan = false;
+            });
+
+            mindmapContainer.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+                setZoom(AppState.zoom * zoomFactor);
+            }, { passive: false });
+
+            zoomInBtn.addEventListener('click', () => setZoom(AppState.zoom * 1.2));
+            zoomOutBtn.addEventListener('click', () => setZoom(AppState.zoom * 0.8));
+            zoomFitBtn.addEventListener('click', resetPanZoom);
+        }
+
+        function setZoom(newZoom) {
+            AppState.zoom = Math.min(Math.max(0.2, newZoom), 3.0);
+            zoomLabel.textContent = `${Math.round(AppState.zoom * 100)}%`;
+            updateViewportTransform();
+        }
+
+        function resetPanZoom() {
+            AppState.zoom = 1.0;
+            AppState.panX = 80;
+            AppState.panY = mindmapContainer.clientHeight / 2 || 300;
+            zoomLabel.textContent = '100%';
+            updateViewportTransform();
+        }
+
+        function updateViewportTransform() {
+            viewportGroup.setAttribute('transform', `translate(${AppState.panX}, ${AppState.panY}) scale(${AppState.zoom})`);
+        }
+
+        /* ==========================================================================
+           8. Export Features (PNG, SVG Vector, ASCII Tree & JSON)
+           ========================================================================== */
+
+        function updateExportState() {
+            const hasData = !!AppState.treeData;
+            exportMenuBtn.disabled = !hasData;
+            exportMenuBtn.classList.toggle('opacity-50', !hasData);
+        }
+
+        function exportAsPNG() {
+            if (!AppState.treeData) return;
+            showToast("Generating PNG export...", "info");
+
+            const svgElement = mindmapSvg.cloneNode(true);
+            svgElement.setAttribute('width', '1920');
+            svgElement.setAttribute('height', '1080');
+
+            const svgString = new XMLSerializer().serializeToString(svgElement);
+            const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+            const URL = window.URL || window.webkitURL || window;
+            const blobURL = URL.createObjectURL(svgBlob);
+
+            const image = new Image();
+            image.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = 1920;
+                canvas.height = 1080;
+                const context = canvas.getContext('2d');
+
+                context.fillStyle = '#090d16';
+                context.fillRect(0, 0, canvas.width, canvas.height);
+
+                context.drawImage(image, 0, 0);
+                const pngURL = canvas.toDataURL('image/png');
+
+                const downloadLink = document.createElement('a');
+                downloadLink.href = pngURL;
+                downloadLink.download = `${AppState.treeData.name}-mindmap.png`;
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+                document.body.removeChild(downloadLink);
+
+                showToast("PNG downloaded successfully!", "success");
+            };
+            image.src = blobURL;
+        }
+
+        function exportAsSVG() {
+            if (!AppState.treeData) return;
+
+            const svgData = mindmapSvg.outerHTML;
+            const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+            const svgUrl = URL.createObjectURL(svgBlob);
+
+            const downloadLink = document.createElement('a');
+            downloadLink.href = svgUrl;
+            downloadLink.download = `${AppState.treeData.name}-mindmap.svg`;
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+
+            showToast("SVG file downloaded!", "success");
+        }
+
+        function generateAsciiTree(node, prefix = '') {
+            if (!node) return '';
+
+            let result = `${node.name}${node.type === 'directory' ? '/' : ''}\n`;
+            if (node.type === 'directory' && node.children) {
+                const count = node.children.length;
+                node.children.forEach((child, index) => {
+                    const isLast = index === count - 1;
+                    const pointer = isLast ? '└── ' : '├── ';
+                    const childPrefix = isLast ? '    ' : '│   ';
+                    result += `${prefix}${pointer}${generateAsciiTree(child, prefix + childPrefix)}`;
+                });
+            }
+            return result;
+        }
+
+        function openAsciiModal() {
+            if (!AppState.treeData) return;
+            const ascii = generateAsciiTree(AppState.treeData);
+            asciiText.textContent = ascii;
+            asciiModal.classList.remove('hidden');
+        }
+
+        function copyAsciiToClipboard() {
+            const text = asciiText.textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                showToast("ASCII Tree copied to clipboard!", "success");
+                asciiModal.classList.add('hidden');
+            });
+        }
+
+        function exportAsJSON() {
+            if (!AppState.treeData) return;
+            // Strip circular handles for JSON dump
+            const cleanData = JSON.parse(JSON.stringify(AppState.treeData, (key, val) => key === 'handle' || key === 'parentHandle' ? undefined : val));
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(cleanData, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `${AppState.treeData.name}-structure.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+            showToast("JSON structure downloaded!", "success");
+        }
+
+        /* ==========================================================================
+           9. Toast Notifications & Preset Demo Directory
+           ========================================================================== */
+
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toastMsg');
+            const toastIcon = document.getElementById('toastIcon');
+
+            toastMsg.textContent = message;
+
+            if (type === 'success') {
+                toastIcon.innerHTML = `<svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`;
+            } else if (type === 'error') {
+                toastIcon.innerHTML = `<svg class="w-5 h-5 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`;
+            } else {
+                toastIcon.innerHTML = `<svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`;
+            }
+
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3200);
+        }
+
+        function loadDemoData() {
+            AppState.isLiveSync = false;
+            AppState.rootHandle = null;
+
+            const demoTree = {
+                name: "my-web-project",
+                type: "directory",
+                path: "my-web-project",
+                collapsed: false,
+                children: [
+                    {
+                        name: "src",
+                        type: "directory",
+                        path: "my-web-project/src",
+                        collapsed: false,
+                        children: [
+                            {
+                                name: "components",
+                                type: "directory",
+                                path: "my-web-project/src/components",
+                                collapsed: false,
+                                children: [
+                                    { name: "Navbar.tsx", type: "file", size: 4520, path: "my-web-project/src/components/Navbar.tsx" },
+                                    { name: "MindMapCanvas.tsx", type: "file", size: 12400, path: "my-web-project/src/components/MindMapCanvas.tsx" }
+                                ]
+                            },
+                            { name: "App.tsx", type: "file", size: 2800, path: "my-web-project/src/App.tsx" },
+                            { name: "index.css", type: "file", size: 3500, path: "my-web-project/src/index.css" }
+                        ]
+                    },
+                    {
+                        name: "assets",
+                        type: "directory",
+                        path: "my-web-project/assets",
+                        collapsed: false,
+                        children: [
+                            { name: "logo.svg", type: "file", size: 2400, path: "my-web-project/assets/logo.svg" },
+                            { name: "banner.png", type: "file", size: 245000, path: "my-web-project/assets/banner.png" }
+                        ]
+                    },
+                    { name: "package.json", type: "file", size: 1850, path: "my-web-project/package.json" },
+                    { name: "README.md", type: "file", size: 4200, path: "my-web-project/README.md" }
+                ]
+            };
+
+            processTreeData(demoTree, true);
+            updateModeBadge('demo');
+        }
+    </script>
+</body>
+</html>
