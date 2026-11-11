@@ -1,0 +1,82 @@
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: #090d16;
+}
+::-webkit-scrollbar-thumb {
+    background: #1e293b;
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #334155;
+}
+
+/* Glassmorphism Styles */
+.glass-panel {
+    background: rgba(17, 23, 38, 0.78);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Grid Background pattern */
+.bg-grid-pattern {
+    background-size: 32px 32px;
+    background-image: 
+        linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+}
+
+/* Prevent text selection while panning mind map */
+.no-select {
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* SVG Node animations & interactions */
+.mindmap-node {
+    transition: transform 0.15s ease-out, filter 0.15s ease-out;
+}
+.mindmap-node:hover {
+    filter: drop-shadow(0 0 12px rgba(99, 102, 241, 0.5));
+}
+
+.connection-line {
+    transition: stroke 0.2s, stroke-width 0.2s;
+}
+.connection-line:hover {
+    stroke-width: 3.5px;
+}
+
+/* Action buttons hover inside nodes */
+.node-action-btn {
+    transition: all 0.15s ease;
+    cursor: pointer;
+}
+.node-action-btn:hover {
+    transform: scale(1.18);
+    filter: brightness(1.2);
+}
+
+/* Tree view hover glow */
+.tree-row {
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.tree-row:hover {
+    background-color: rgba(255, 255, 255, 0.04);
+}
+
+/* Mind map: ปุ่มจัดการจะโผล่ตอน hover เท่านั้น (กันทับชื่อไฟล์) */
+.mindmap-node { cursor: pointer; }
+.node-actions { opacity: 0; pointer-events: none; transition: opacity 0.15s ease; }
+.mindmap-node:hover .node-actions { opacity: 1; pointer-events: auto; }
+.node-toggle { cursor: pointer; }
+@media (hover: none) {
+    .node-actions { opacity: 1; pointer-events: auto; }
+}
+
+/* ให้ลาก/แพนด้วยนิ้วบนมือถือได้ (ใช้ร่วมกับ Pointer Events) */
+#mindmapContainer { touch-action: none; }
