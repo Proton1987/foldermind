@@ -473,7 +473,7 @@ function openCreateModal(targetNode, type = 'file') {
     ui.createModalInputName.value = '';
     setCreateType(type);
     show(ui.createModal);
-    setTimeout(() => ui.createModalInputName.focus(), 50);
+    ui.createModalInputName.focus();
 }
 
 async function submitCreate() {

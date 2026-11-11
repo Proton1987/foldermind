@@ -76,14 +76,18 @@ const V_GAP = 48;
 const MAX_LABEL = 13;
 
 function actionButton({ x, stroke, color, glyph, size, title, onClick }) {
-    const g = svg('g', { class: 'node-action-btn', transform: `translate(${x}, 0)` });
-    g.append(
+    // ชั้นนอกถือตำแหน่ง (translate) ชั้นในถือเอฟเฟกต์ hover (scale)
+    // ถ้ารวมกัน CSS transform จะทับ attribute ทำให้ปุ่มกระโดดหนีเมาส์ตอน hover
+    const outer = svg('g', { transform: `translate(${x}, 0)` });
+    const inner = svg('g', { class: 'node-action-btn' });
+    inner.append(
         svg('title', {}, title),
         svg('circle', { cx: 9, cy: 10, r: 7.5, fill: '#1e293b', stroke, 'stroke-width': 1 }),
-        svg('text', { x: 9, y: 13.5, 'text-anchor': 'middle', fill: color, 'font-size': size, 'font-weight': 'bold' }, glyph)
+        svg('text', { x: 9, y: 13.5, 'text-anchor': 'middle', fill: color, 'font-size': size, 'font-weight': 'bold', 'pointer-events': 'none' }, glyph)
     );
-    g.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
-    return g;
+    outer.append(inner);
+    outer.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
+    return outer;
 }
 
 /**
