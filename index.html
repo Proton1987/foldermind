@@ -2,7 +2,7 @@
 <html lang="th" class="dark">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
     <meta name="color-scheme" content="dark">
     <meta name="description" content="FolderMind: แสดงโครงสร้างโฟลเดอร์เป็น Mind Map และจัดการไฟล์บนเครื่องจริง">
     <title>FolderMind – แผนผังโฟลเดอร์และ Mind Map</title>
@@ -29,12 +29,12 @@
     </script>
     <link rel="stylesheet" href="css/style.css">
 </head>
-<body class="bg-darkbg text-slate-100 font-sans antialiased h-screen overflow-hidden flex flex-col">
+<body class="bg-darkbg text-slate-100 font-sans antialiased app-shell overflow-hidden flex flex-col">
 
     <!-- Top Navigation Header -->
-    <header class="h-16 glass-panel border-b border-slate-800/80 px-4 flex items-center justify-between shrink-0 z-30">
+    <header id="appHeader" class="app-header glass-panel border-b border-slate-800/80 shrink-0 z-30">
         <!-- Brand & Logo -->
-        <div class="flex items-center gap-3">
+        <div class="app-header__brand flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 via-indigo-500 to-cyan-400 p-0.5 flex items-center justify-center shadow-lg shadow-indigo-500/20">
                 <div class="w-full h-full bg-darkbg rounded-[10px] flex items-center justify-center">
                     <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -42,30 +42,30 @@
                     </svg>
                 </div>
             </div>
-            <div>
+            <div class="brand-text min-w-0">
                 <h1 class="font-bold text-base bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent flex items-center gap-2">
-                    FolderMind <span class="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-mono font-medium border border-indigo-500/30">v3.0 Sync</span>
+                    FolderMind <span class="hidden xl:inline-block text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-mono font-medium border border-indigo-500/30">v3.0 Sync</span>
                 </h1>
-                <p class="text-xs text-slate-400">แสดงโฟลเดอร์เป็น Mind Map และจัดการไฟล์บนดิสก์</p>
+                <p class="hidden md:block lg:hidden xl:block text-xs text-slate-400">แสดงโฟลเดอร์เป็น Mind Map และจัดการไฟล์บนดิสก์</p>
             </div>
         </div>
 
         <!-- Middle Controls: View Selector & Search -->
-        <div class="flex items-center gap-3">
+        <div class="app-header__middle">
             <!-- View Toggle -->
             <div class="bg-slate-900/90 p-1 rounded-xl border border-slate-800 flex items-center text-xs font-medium">
-                <button id="viewMindmapBtn" class="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all text-white bg-indigo-600 shadow-md">
+                <button id="viewMindmapBtn" aria-label="มุมมอง Mind Map" title="มุมมอง Mind Map" class="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all text-white bg-indigo-600 shadow-md">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18"></path></svg>
-                    <span>Mind Map</span>
+                    <span class="hidden sm:inline">Mind Map</span>
                 </button>
-                <button id="viewTreeBtn" class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 transition-all">
+                <button id="viewTreeBtn" aria-label="มุมมองรายการต้นไม้" title="มุมมองรายการต้นไม้" class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 transition-all">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"></path></svg>
-                    <span>รายการต้นไม้</span>
+                    <span class="hidden sm:inline">รายการต้นไม้</span>
                 </button>
             </div>
 
             <!-- Search Input -->
-            <div class="relative w-48 sm:w-64">
+            <div class="search-box relative">
                 <input type="text" id="searchInput" placeholder="ค้นหาไฟล์หรือนามสกุล..." aria-label="ค้นหาไฟล์หรือนามสกุล" class="w-full bg-slate-900/80 border border-slate-800 rounded-xl px-3 py-1.5 pl-8 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors">
                 <svg class="w-4 h-4 text-slate-500 absolute left-2.5 top-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                 <button id="clearSearchBtn" aria-label="ล้างคำค้นหา" class="hidden absolute right-2.5 top-2 text-slate-500 hover:text-slate-300">
@@ -75,25 +75,25 @@
         </div>
 
         <!-- Action Buttons & Export Menu -->
-        <div class="flex items-center gap-2">
+        <div class="app-header__actions flex items-center gap-2">
             <!-- Real-Time Sync Disk Selector (Primary) -->
-            <button id="openLiveSyncBtn" class="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-semibold px-3.5 py-1.5 rounded-xl text-xs transition-all shadow-lg shadow-emerald-500/20 active:scale-95">
+            <button id="openLiveSyncBtn" aria-label="เปิดโฟลเดอร์แบบ Sync เครื่องจริง" title="เปิดโฟลเดอร์แบบ Sync เครื่องจริง" class="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-semibold px-3.5 py-1.5 rounded-xl text-xs transition-all shadow-lg shadow-emerald-500/20 active:scale-95">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-                <span>เปิดโฟลเดอร์แบบ Sync เครื่องจริง</span>
+                <span class="hidden xl:inline">เปิดโฟลเดอร์แบบ Sync เครื่องจริง</span><span class="hidden sm:inline xl:hidden">เปิดโฟลเดอร์ (Sync)</span>
             </button>
 
             <!-- Open Folder Input Fallback (Read-Only) -->
             <input type="file" id="folderInput" webkitdirectory directory multiple class="hidden">
             <button id="selectFolderBtn" title="เปิดโฟลเดอร์แบบดูอย่างเดียว" class="flex items-center gap-1.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 px-3 py-1.5 rounded-xl text-xs font-medium transition-all">
                 <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 002-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
-                <span class="hidden lg:inline">ดูอย่างเดียว</span>
+                <span class="hidden xl:inline">ดูอย่างเดียว</span>
             </button>
 
             <!-- Export Menu Button & Dropdown -->
             <div class="relative">
-                <button id="exportMenuBtn" class="flex items-center gap-1.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 px-3 py-1.5 rounded-xl text-xs font-medium transition-all">
+                <button id="exportMenuBtn" aria-label="ส่งออก" aria-haspopup="true" class="flex items-center gap-1.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 px-3 py-1.5 rounded-xl text-xs font-medium transition-all">
                     <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                    <span>ส่งออก</span>
+                    <span class="hidden sm:inline">ส่งออก</span>
                     <svg class="w-3 h-3 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                 </button>
 
@@ -121,19 +121,19 @@
     </header>
 
     <!-- Sub-bar Tools & Info -->
-    <div id="subBar" class="h-10 bg-slate-950/80 border-b border-slate-900 px-4 flex items-center justify-between text-xs text-slate-400 shrink-0">
-        <div class="flex items-center gap-3">
+    <div id="subBar" class="app-subbar bg-slate-950/80 border-b border-slate-900 text-xs text-slate-400 shrink-0">
+        <div class="app-subbar__info flex items-center gap-3">
             <!-- Mode Badge -->
             <div id="modeBadge" class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-900 text-slate-400 border border-slate-800">
                 <span class="w-2 h-2 rounded-full bg-slate-500"></span>
                 <span>ยังไม่ได้โหลดโฟลเดอร์</span>
             </div>
 
-            <span id="statRootName" class="font-medium text-slate-200 truncate max-w-xs">ยังไม่ได้เลือกโฟลเดอร์</span>
+            <span id="statRootName" class="root-name font-medium text-slate-200 truncate">ยังไม่ได้เลือกโฟลเดอร์</span>
             <span id="statSummary" class="hidden sm:inline-block text-slate-400 border-l border-slate-800 pl-3">0 ไฟล์, 0 โฟลเดอร์</span>
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="app-subbar__tools flex items-center gap-2">
             <!-- Mind map navigation toolbar controls -->
             <div id="mindmapControls" class="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-0.5">
                 <button id="zoomOutBtn" title="ซูมออก" aria-label="ซูมออก" class="p-1 hover:bg-slate-800 rounded text-slate-300 hover:text-white"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path></svg></button>
@@ -144,11 +144,14 @@
 
             <!-- Collapse / Expand Tree buttons -->
             <div class="flex items-center gap-1 border-l border-slate-800 pl-2">
-                <button id="expandAllBtn" class="px-2 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-lg transition-colors text-[11px]">ขยายทั้งหมด</button>
-                <button id="collapseAllBtn" class="px-2 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-lg transition-colors text-[11px]">ยุบทั้งหมด</button>
+                <button id="expandAllBtn" aria-label="ขยายทั้งหมด" title="ขยายทั้งหมด" class="px-2 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-lg transition-colors text-[11px]"><span class="hidden sm:inline">ขยายทั้งหมด</span><svg class="sm:hidden w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg></button>
+                <button id="collapseAllBtn" aria-label="ยุบทั้งหมด" title="ยุบทั้งหมด" class="px-2 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-lg transition-colors text-[11px]"><span class="hidden sm:inline">ยุบทั้งหมด</span><svg class="sm:hidden w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25"></path></svg></button>
             </div>
         </div>
     </div>
+
+    <!-- Backdrop ของ Drawer (จอเล็ก) -->
+    <div id="sidebarBackdrop" aria-hidden="true"></div>
 
     <!-- Main Content Work Area -->
     <main class="flex-1 relative overflow-hidden flex">
@@ -248,29 +251,29 @@
         <div id="dropzoneArea" class="flex-1 relative w-full h-full bg-grid-pattern overflow-hidden">
             
             <!-- Floating Sidebar Expand Toggle (when sidebar collapsed) -->
-            <button id="expandSidebarBtn" aria-label="แสดงแถบด้านข้าง" class="hidden absolute top-4 left-4 z-30 p-2 glass-panel rounded-xl text-slate-400 hover:text-white shadow-xl">
+            <button id="expandSidebarBtn" aria-label="แสดงแถบด้านข้าง" class="absolute top-4 left-4 z-30 p-2 glass-panel rounded-xl text-slate-400 hover:text-white shadow-xl">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
             </button>
 
             <!-- 1. EMPTY STATE / DRAG & DROP HERO OVERLAY -->
-            <div id="emptyState" class="absolute inset-0 z-10 flex flex-col items-center justify-center p-6 text-center transition-all">
-                <div class="max-w-xl glass-panel p-8 sm:p-12 rounded-3xl border border-slate-800 shadow-2xl shadow-indigo-950/40 relative group hover:border-indigo-500/50 transition-all duration-300">
+            <div id="emptyState" class="absolute inset-0 z-10 flex flex-col items-center p-3 sm:p-6 text-center overflow-y-auto transition-all">
+                <div class="w-full max-w-xl glass-panel p-5 sm:p-12 rounded-3xl border border-slate-800 shadow-2xl shadow-indigo-950/40 relative group hover:border-indigo-500/50 transition-all duration-300">
                     <!-- Glowing Background Effect -->
                     <div class="absolute -inset-1 bg-gradient-to-r from-emerald-500 via-indigo-500 to-cyan-500 rounded-3xl blur-xl opacity-25 group-hover:opacity-45 transition duration-500"></div>
 
                     <div class="relative flex flex-col items-center">
-                        <div class="w-20 h-20 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mb-6 text-emerald-400 shadow-inner">
+                        <div class="hero-icon w-20 h-20 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mb-6 text-emerald-400 shadow-inner">
                             <svg class="w-10 h-10 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"></path>
                             </svg>
                         </div>
 
-                        <h2 class="text-2xl font-bold text-white mb-2">เลือกโฟลเดอร์สำหรับ Mind Map และ Sync ดิสก์</h2>
+                        <h2 class="text-xl sm:text-2xl font-bold text-white mb-2">เลือกโฟลเดอร์สำหรับ Mind Map และ Sync ดิสก์</h2>
                         <p class="text-slate-400 text-sm mb-6 max-w-md">
                             เชื่อมต่อโฟลเดอร์บนเครื่องจริงของคุณ เพื่อสร้างไฟล์/โฟลเดอร์ย่อย และแสดง Mind Map สวยงาม
                         </p>
 
-                        <div class="flex flex-col sm:flex-row items-center gap-3">
+                        <div class="flex flex-col sm:flex-row sm:flex-wrap sm:justify-center items-center gap-3 w-full">
                             <button id="heroLiveSyncBtn" class="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-semibold text-sm shadow-lg shadow-emerald-500/25 transition-all transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-2">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
                                 เปิด Sync กับเครื่องจริง (อ่าน/เขียน)
@@ -287,7 +290,7 @@
                             ⚠️ เบราว์เซอร์ของคุณไม่รองรับ File System Access API (แนะนำให้ใช้ Google Chrome, Microsoft Edge หรือ Brave สำหรับโหมด Sync เขียนข้อมูลจริงลงเครื่อง)
                         </div>
 
-                        <div class="mt-8 pt-6 border-t border-slate-800/80 w-full flex items-center justify-center gap-6 text-xs text-slate-500">
+                        <div class="mt-6 sm:mt-8 pt-5 sm:pt-6 border-t border-slate-800/80 w-full flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-slate-500">
                             <span class="flex items-center gap-1.5">
                                 <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                                 Sync กับดิสก์โดยตรง
@@ -305,7 +308,7 @@
             <div id="dragHoverOverlay" class="hidden absolute inset-0 z-40 bg-indigo-950/80 backdrop-blur-md border-4 border-dashed border-indigo-500 flex items-center justify-center">
                 <div class="text-center">
                     <svg class="w-16 h-16 text-indigo-400 mx-auto animate-pulse mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
-                    <p class="text-2xl font-bold text-white">ปล่อยเพื่ออ่านโครงสร้างโฟลเดอร์ (ดูอย่างเดียว)</p>
+                    <p class="text-lg sm:text-2xl font-bold text-white px-4">ปล่อยเพื่ออ่านโครงสร้างโฟลเดอร์ (ดูอย่างเดียว)</p>
                 </div>
             </div>
 
@@ -331,14 +334,17 @@
                 </svg>
             </div>
 
+            <!-- แถบเครื่องมือของโหนดที่เลือก (แสดงเฉพาะอุปกรณ์สัมผัส) -->
+            <div id="nodeActionBar" class="node-action-bar glass-panel rounded-2xl shadow-2xl hidden" role="toolbar" aria-label="จัดการรายการที่เลือก"></div>
+
             <!-- 3. VIEWPORT: TREE LIST DIAGRAM VIEW -->
-            <div id="treeContainer" class="hidden w-full h-full overflow-y-auto p-6 text-slate-200">
-                <div class="max-w-4xl mx-auto glass-panel rounded-2xl p-6 border border-slate-800 shadow-xl">
-                    <div id="treeHeader" class="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
+            <div id="treeContainer" class="hidden w-full h-full overflow-y-auto p-2 sm:p-4 lg:p-6 text-slate-200">
+                <div class="max-w-4xl mx-auto glass-panel rounded-2xl p-3 sm:p-6 border border-slate-800 shadow-xl">
+                    <div id="treeHeader" class="flex flex-wrap gap-2 items-center justify-between mb-4 pb-3 border-b border-slate-800">
                         <div class="flex items-center gap-2">
                             <span class="text-xs uppercase font-semibold text-slate-400">แผนผังโฟลเดอร์และเครื่องมือจัดการ</span>
                         </div>
-                        <div class="text-xs text-slate-500 font-mono" id="treePathNotice">ตำแหน่ง: /</div>
+                        <div class="text-xs text-slate-500 font-mono break-all" id="treePathNotice">ตำแหน่ง: /</div>
                     </div>
                     <!-- Tree Root List Container -->
                     <div id="treeContent" class="space-y-1 font-mono text-sm"></div>
@@ -350,7 +356,7 @@
 
     <!-- CREATE FILE / FOLDER MODAL -->
     <div id="createModal" role="dialog" aria-modal="true" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="w-full max-w-md glass-panel rounded-2xl border border-slate-800 shadow-2xl p-6 relative">
+        <div class="w-full max-w-md glass-panel rounded-2xl border border-slate-800 shadow-2xl p-4 sm:p-6 relative">
             <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
                 <h3 id="createModalTitle" class="font-bold text-base text-slate-100 flex items-center gap-2">
                     <span id="createModalIcon" class="text-emerald-400">➕</span>
@@ -394,7 +400,7 @@
 
     <!-- CONFIRM DELETE MODAL -->
     <div id="deleteModal" role="dialog" aria-modal="true" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="w-full max-w-sm glass-panel rounded-2xl border border-rose-900/50 shadow-2xl p-6 relative">
+        <div class="w-full max-w-sm glass-panel rounded-2xl border border-rose-900/50 shadow-2xl p-4 sm:p-6 relative">
             <div class="flex items-center gap-3 mb-4 text-rose-400">
                 <div class="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center shrink-0">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
@@ -419,7 +425,7 @@
 
     <!-- ASCII Tree Copy Modal -->
     <div id="asciiModal" role="dialog" aria-modal="true" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="w-full max-w-2xl glass-panel rounded-2xl border border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+        <div class="w-full max-w-2xl glass-panel rounded-2xl border border-slate-800 shadow-2xl overflow-hidden flex flex-col">
             <div class="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
                 <h3 class="font-bold text-sm text-slate-200 flex items-center gap-2">
                     <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>

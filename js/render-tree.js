@@ -95,7 +95,7 @@ function actionButton({ x, stroke, color, glyph, size, title, onClick }) {
  * คืนค่า bounds { x, y, width, height } ของเนื้อหา (หน่วยเดียวกับพิกัดใน viewportGroup)
  * หรือ null ถ้าไม่มีอะไรให้วาด
  */
-export function renderMindmap({ root, query, linesLayer, nodesLayer, onToggle, onCreate, onDelete, onFileClick }) {
+export function renderMindmap({ root, query, activeNode, linesLayer, nodesLayer, onToggle, onCreate, onDelete, onFileClick }) {
     linesLayer.replaceChildren();
     nodesLayer.replaceChildren();
     if (!root) return null;
@@ -146,7 +146,7 @@ export function renderMindmap({ root, query, linesLayer, nodesLayer, onToggle, o
             }));
         }
 
-        const g = svg('g', { class: 'mindmap-node', transform: `translate(${n.x}, ${n.y - NODE_H / 2})` });
+        const g = svg('g', { class: data === activeNode ? 'mindmap-node is-active' : 'mindmap-node', transform: `translate(${n.x}, ${n.y - NODE_H / 2})` });
         const hit = isNameMatch(data, query);
 
         const rect = svg('rect', {
@@ -261,7 +261,7 @@ export function renderTree({ root, query, container, pathLabel, onToggle, onCrea
 
         const row = html('div', `tree-row flex items-center justify-between py-1.5 px-2 rounded-lg cursor-pointer my-0.5 border ${
             isNameMatch(node, query) ? 'border-cyan-500 bg-cyan-950/30' : 'border-transparent hover:border-slate-800'}`);
-        row.style.paddingLeft = `${depth * 20 + 8}px`;
+        row.style.setProperty('--depth', depth); // ระยะเยื้องกำหนดใน CSS (ย่อลงบนจอเล็ก)
         row.title = node.path;
 
         // ซ้าย: ลูกศร + ไอคอน + ชื่อ
@@ -281,7 +281,7 @@ export function renderTree({ root, query, container, pathLabel, onToggle, onCrea
         const right = html('div', 'flex items-center gap-1 shrink-0 font-mono text-xs');
         if (isDir) {
             const label = node.skipped ? 'ไม่อ่านเนื้อหา' : `${node.children?.length ?? 0} รายการ`;
-            right.append(html('span', 'bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full text-[10px] mr-1', label));
+            right.append(html('span', 'count-badge bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full text-[10px] mr-1', label));
             right.append(
                 iconButton('hover:bg-cyan-500/20 text-cyan-400', 'สร้างไฟล์ใหม่ในโฟลเดอร์นี้', PLUS_PATH, () => onCreate(node, 'file')),
                 iconButton('hover:bg-amber-500/20 text-amber-400', 'สร้างโฟลเดอร์ย่อย', NEW_FOLDER_PATH, () => onCreate(node, 'folder'))
@@ -302,7 +302,7 @@ export function renderTree({ root, query, container, pathLabel, onToggle, onCrea
         wrapper.append(row);
 
         if (isDir && isOpen(node, query) && node.children?.length) {
-            const kids = html('div', 'border-l border-slate-800/80 ml-4');
+            const kids = html('div', 'tree-children');
             for (const child of node.children) {
                 const el = build(child, depth + 1, node);
                 if (el) kids.append(el);

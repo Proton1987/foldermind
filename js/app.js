@@ -31,6 +31,8 @@ const state = {
     panY: 300,
     bounds: null,            // ขอบเขตของ Mind Map ที่วาดล่าสุด
     needsFit: false,         // true = ครั้งถัดไปที่วาด Mind Map ให้ปรับพอดีหน้าจอ
+    autoFit: false,          // 'readable' | 'full' = ยังอยู่ในโหมดพอดีจอ (จะปรับใหม่เมื่อหมุน/ย่อขยายหน้าต่าง); false = ผู้ใช้ปรับเองแล้ว
+    activePath: null,        // พาธของโหนดที่เลือกใน Mind Map (ใช้กับแถบเครื่องมือบนอุปกรณ์สัมผัส)
     busy: false,
     createContext: { targetNode: null, type: 'file' },
     deleteContext: { targetNode: null, parentNode: null },
@@ -50,7 +52,7 @@ const IDS = [
     'deleteModal', 'deleteModalTargetName', 'deleteModalWarnSync', 'confirmDeleteBtn', 'cancelDeleteBtn',
     'asciiModal', 'asciiText', 'copyAsciiBtn', 'closeAsciiModal',
     'statsSidebar', 'toggleSidebarBtn', 'expandSidebarBtn',
-    'toast', 'toastMsg', 'toastIcon',
+    'toast', 'toastMsg', 'toastIcon', 'nodeActionBar', 'sidebarBackdrop',
     'statRootName', 'statSummary', 'statFilesCount', 'statFoldersCount', 'statTotalSize', 'extBreakdownList',
     'badgeFolderCount', 'badgeCodeCount', 'badgeMediaCount', 'badgeDocCount', 'badgeDataCount', 'badgeArchiveCount'
 ];
@@ -154,12 +156,14 @@ function collapseDeep(node, depth = 0) {
 function setTree(root, { fresh = true } = {}) {
     state.stats = analyze(root);
     state.treeData = root;
+    document.body.classList.add('has-tree');
 
     let autoCollapsed = false;
     if (fresh) {
         const total = state.stats.totalFiles + state.stats.totalFolders;
         if (total > LARGE_TREE_THRESHOLD) { collapseDeep(root); autoCollapsed = true; }
         state.needsFit = true;
+        state.activePath = null;
     }
 
     renderStats();
@@ -227,10 +231,11 @@ function switchView(view) {
 }
 
 const viewHandlers = {
-    onToggle: (node) => { node.collapsed = !node.collapsed; renderActiveView(); },
+    onToggle: (node) => { node.collapsed = !node.collapsed; state.activePath = node.path; renderActiveView(); },
     onCreate: (node, type) => openCreateModal(node, type),
     onDelete: (node, parent) => openDeleteModal(node, parent),
     onFileClick: (node) => {
+        if (state.activeView === 'mindmap') { state.activePath = node.path; renderActiveView(); }
         if (state.activeView === 'tree') {
             copyText(node.path).then((ok) => showToast(ok ? `คัดลอกพาธแล้ว: ${node.path}` : 'คัดลอกไม่สำเร็จ', ok ? 'success' : 'error'));
         } else {
@@ -240,7 +245,7 @@ const viewHandlers = {
 };
 
 const mindmapArgs = () => ({
-    root: state.treeData, query: state.searchQuery,
+    root: state.treeData, query: state.searchQuery, activeNode: resolveActive(),
     linesLayer: ui.linesLayer, nodesLayer: ui.nodesLayer, ...viewHandlers
 });
 
@@ -248,7 +253,7 @@ function renderActiveView() {
     if (!state.treeData) return;
     if (state.activeView === 'mindmap') {
         state.bounds = renderMindmap(mindmapArgs());
-        if (state.needsFit && state.bounds) { fitToScreen(); state.needsFit = false; }
+        if (state.needsFit && state.bounds) { fitToScreen('readable'); state.needsFit = false; }
         else applyTransform();
     } else {
         renderTree({
@@ -256,6 +261,7 @@ function renderActiveView() {
             container: ui.treeContent, pathLabel: ui.treePathNotice, ...viewHandlers
         });
     }
+    updateActionBar();
 }
 
 /** ขยายทั้งหมด / ยุบทั้งหมด (โฟลเดอร์รากเปิดไว้เสมอ) — วาดครั้งเดียว ไม่วาดซ้ำทุกโหนดเหมือนเดิม */
@@ -271,7 +277,7 @@ function setAllCollapsed(collapsed) {
 }
 
 /* ==========================================================================
-   Pan & Zoom
+   Pan & Zoom (เมาส์ / ทัชแพด / นิ้วสัมผัส + หยิกซูม)
    ========================================================================== */
 
 function applyTransform() {
@@ -282,66 +288,218 @@ function applyTransform() {
 function zoomAt(px, py, factor) {
     const zoom = clamp(state.zoom * factor, MIN_ZOOM, MAX_ZOOM);
     const k = zoom / state.zoom;
-    state.panX = px - (px - state.panX) * k; // ซูมเข้าหาตำแหน่งเมาส์
+    state.panX = px - (px - state.panX) * k; // ซูมเข้าหาตำแหน่งเมาส์/จุดกึ่งกลางนิ้ว
     state.panY = py - (py - state.panY) * k;
     state.zoom = zoom;
+    state.autoFit = false;
     applyTransform();
 }
 
-function fitToScreen() {
+/**
+ * ปรับให้ Mind Map พอดีหน้าจอ
+ *  mode 'full'     = เห็นทั้งแผนผัง (ปุ่ม "พอดีหน้าจอ")
+ *  mode 'readable' = เหมือน full แต่ไม่ย่อจนตัวอักษรอ่านไม่ออก ถ้าแผนผังกว้างเกินจะชิดซ้ายให้เห็น root แล้วลากดูต่อ
+ *                    (เดิมบนมือถือจะย่อเหลือ ~10%)
+ */
+function fitToScreen(mode = 'full') {
     const { bounds } = state;
     const w = ui.mindmapContainer.clientWidth;
     const h = ui.mindmapContainer.clientHeight;
     if (!bounds || !w || !h) return;
-    const pad = 40;
-    const zoom = clamp(Math.min((w - pad * 2) / bounds.width, (h - pad * 2) / bounds.height, 1), MIN_ZOOM, MAX_ZOOM);
+
+    const pad = w < 600 ? 16 : 40;
+    let zoom = Math.min((w - pad * 2) / bounds.width, (h - pad * 2) / bounds.height, 1);
+    if (mode === 'readable') zoom = Math.max(zoom, Math.min(w, h) < 500 ? 0.7 : 0.5);
+    zoom = clamp(zoom, MIN_ZOOM, MAX_ZOOM);
+
+    const contentW = bounds.width * zoom;
+    const contentH = bounds.height * zoom;
     state.zoom = zoom;
-    state.panX = (w - bounds.width * zoom) / 2 - bounds.x * zoom;
-    state.panY = (h - bounds.height * zoom) / 2 - bounds.y * zoom;
+    state.panX = contentW <= w - pad * 2 + 0.5 ? (w - contentW) / 2 - bounds.x * zoom : pad - bounds.x * zoom;
+    state.panY = (h - contentH) / 2 - bounds.y * zoom;
+    state.autoFit = mode;
     applyTransform();
 }
 
 function setupPanZoom() {
     const container = ui.mindmapContainer;
+    const pointers = new Map();   // pointerId -> {x, y}  (รองรับหลายนิ้ว)
     let drag = null;
+    let pinch = null;
     let suppressClick = false;
 
+    const localPoint = (x, y) => {
+        const r = container.getBoundingClientRect();
+        return { x: x - r.left, y: y - r.top };
+    };
+    const twoFingers = () => {
+        const [a, b] = [...pointers.values()];
+        return { dist: Math.hypot(a.x - b.x, a.y - b.y), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } };
+    };
+    // กันการลาก/หยิกที่จบบนโหนดถูกนับเป็นคลิก (เดิมจะยุบ/ขยายโดยไม่ตั้งใจ)
+    const suppressNextClick = () => { suppressClick = true; setTimeout(() => { suppressClick = false; }, 0); };
+
     container.addEventListener('pointerdown', (e) => {
-        if (e.button !== 0) return;
-        drag = { offX: e.clientX - state.panX, offY: e.clientY - state.panY, x0: e.clientX, y0: e.clientY, moved: false };
+        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (pointers.size === 2) {
+            pinch = twoFingers();
+            drag = null;
+        } else if (pointers.size === 1 && e.button === 0) {
+            drag = { offX: e.clientX - state.panX, offY: e.clientY - state.panY, x0: e.clientX, y0: e.clientY, moved: false };
+        }
     });
+
     window.addEventListener('pointermove', (e) => {
+        if (!pointers.has(e.pointerId)) return;
+        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+        if (pinch && pointers.size === 2) {
+            const now = twoFingers();
+            if (pinch.dist > 0 && now.dist > 0) {
+                const m = localPoint(now.mid.x, now.mid.y);
+                zoomAt(m.x, m.y, now.dist / pinch.dist);
+            }
+            state.panX += now.mid.x - pinch.mid.x;
+            state.panY += now.mid.y - pinch.mid.y;
+            pinch = now;
+            state.autoFit = false;
+            applyTransform();
+            return;
+        }
         if (!drag) return;
         if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 4) return;
         drag.moved = true;
+        state.autoFit = false;
         state.panX = e.clientX - drag.offX;
         state.panY = e.clientY - drag.offY;
         applyTransform();
     });
-    const endDrag = () => {
-        if (drag?.moved) {
-            suppressClick = true; // กันไม่ให้การลากไปจบบนโหนดถูกนับเป็นคลิก (เดิมจะยุบ/ขยายโดยไม่ตั้งใจ)
-            setTimeout(() => { suppressClick = false; }, 0);
-        }
+
+    const endPointer = (e) => {
+        if (!pointers.has(e.pointerId)) return;
+        const wasPinching = Boolean(pinch);
+        pointers.delete(e.pointerId);
+        if (pointers.size < 2) pinch = null;
+        if (wasPinching) { suppressNextClick(); drag = null; return; } // นิ้วที่เหลือไม่ลากต่อ (กันภาพกระโดด)
+        if (drag?.moved) suppressNextClick();
         drag = null;
     };
-    window.addEventListener('pointerup', endDrag);
-    window.addEventListener('pointercancel', endDrag);
+    window.addEventListener('pointerup', endPointer);
+    window.addEventListener('pointercancel', endPointer);
+    window.addEventListener('blur', () => { pointers.clear(); pinch = null; drag = null; });
+
     container.addEventListener('click', (e) => {
         if (suppressClick) { e.stopPropagation(); e.preventDefault(); }
     }, true);
+    container.addEventListener('click', (e) => {       // แตะพื้นที่ว่าง = ยกเลิกการเลือกโหนด
+        if (state.activePath && !e.target.closest('.mindmap-node')) { state.activePath = null; renderActiveView(); }
+    });
 
     container.addEventListener('wheel', (e) => {
         e.preventDefault();
-        const rect = container.getBoundingClientRect();
-        zoomAt(e.clientX - rect.left, e.clientY - rect.top, e.deltaY < 0 ? 1.1 : 1 / 1.1);
+        const p = localPoint(e.clientX, e.clientY);
+        zoomAt(p.x, p.y, e.deltaY < 0 ? 1.1 : 1 / 1.1);
     }, { passive: false });
 
-    const zoomCenter = (factor) =>
-        zoomAt(container.clientWidth / 2, container.clientHeight / 2, factor);
+    const zoomCenter = (factor) => zoomAt(container.clientWidth / 2, container.clientHeight / 2, factor);
     ui.zoomInBtn.addEventListener('click', () => zoomCenter(1.2));
     ui.zoomOutBtn.addEventListener('click', () => zoomCenter(1 / 1.2));
-    ui.zoomFitBtn.addEventListener('click', fitToScreen);
+    ui.zoomFitBtn.addEventListener('click', () => fitToScreen('full'));
+}
+
+/**
+ * เมื่อพื้นที่ Mind Map เปลี่ยนขนาด (หมุนจอ, ย่อ/ขยายหน้าต่าง, เปิด/ปิดแถบข้าง):
+ *  - ถ้ายังอยู่ในโหมดพอดีจอ → ปรับพอดีใหม่
+ *  - ถ้าผู้ใช้ลาก/ซูมเองแล้ว → คงจุดกึ่งกลางเดิมไว้ (ไม่ให้ภาพไหลหนีออกนอกจอ)
+ */
+function setupResizeHandling() {
+    let lastW = 0, lastH = 0;
+    new ResizeObserver(([entry]) => {
+        const { width: w, height: h } = entry.contentRect;
+        if (!w || !h) return;                               // ซ่อนอยู่ (กำลังดู Tree view)
+        if (state.treeData && state.activeView === 'mindmap') {
+            if (state.autoFit && state.bounds) fitToScreen(state.autoFit);
+            else if (lastW && lastH) {
+                state.panX += (w - lastW) / 2;
+                state.panY += (h - lastH) / 2;
+                applyTransform();
+            }
+        }
+        lastW = w; lastH = h;
+    }).observe(ui.mindmapContainer);
+}
+
+/* ==========================================================================
+   โหนดที่เลือก + แถบเครื่องมือ (อุปกรณ์สัมผัส)
+   ปุ่ม SVG ในโหนดเล็กเกินแตะเมื่อซูมออก จึงใช้แถบปุ่มใหญ่ที่ขอบล่างแทน (CSS ซ่อนบนเมาส์)
+   ========================================================================== */
+
+function findByPath(node, path) {
+    if (node.path === path) return node;
+    for (const c of node.children ?? []) { const hit = findByPath(c, path); if (hit) return hit; }
+    return null;
+}
+
+function findParent(root, target) {
+    for (const c of root.children ?? []) {
+        if (c === target) return root;
+        const hit = findParent(c, target);
+        if (hit) return hit;
+    }
+    return null;
+}
+
+const resolveActive = () => (state.activePath && state.treeData ? findByPath(state.treeData, state.activePath) : null);
+
+function updateActionBar() {
+    const bar = ui.nodeActionBar;
+    const node = state.activeView === 'mindmap' ? resolveActive() : null;
+    if (!node) { hide(bar); bar.replaceChildren(); return; }
+
+    const parent = findParent(state.treeData, node);
+    const makeBtn = (label, cls, onClick, aria) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = cls;
+        b.textContent = label;
+        if (aria) b.setAttribute('aria-label', aria);
+        b.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
+        return b;
+    };
+    const name = document.createElement('span');
+    name.className = 'node-action-bar__name';
+    name.textContent = node.name;
+    name.title = node.path;
+
+    const items = [name];
+    if (node.type === 'directory') {
+        items.push(
+            makeBtn('＋ ไฟล์', 'border-cyan-500/40 bg-cyan-500/10 text-cyan-300', () => openCreateModal(node, 'file')),
+            makeBtn('📁 โฟลเดอร์', 'border-amber-500/40 bg-amber-500/10 text-amber-300', () => openCreateModal(node, 'folder'))
+        );
+    }
+    if (parent) items.push(makeBtn('🗑 ลบ', 'border-rose-500/40 bg-rose-500/10 text-rose-300', () => openDeleteModal(node, parent)));
+    items.push(makeBtn('✕', 'border-slate-700 bg-slate-900 text-slate-400', () => { state.activePath = null; renderActiveView(); }, 'ปิดแถบเครื่องมือ'));
+    bar.replaceChildren(...items);
+    show(bar);
+}
+
+/* ==========================================================================
+   แถบสถิติด้านข้าง: แถบประจำ (>=1024px) / Drawer เลื่อนเข้า (<1024px)
+   ========================================================================== */
+
+const desktopQuery = window.matchMedia('(min-width: 1024px)');
+const isDrawerOpen = () => !desktopQuery.matches && document.body.classList.contains('sidebar-open');
+
+function setSidebar(open) {
+    if (desktopQuery.matches) document.body.classList.toggle('sidebar-collapsed', !open);
+    else document.body.classList.toggle('sidebar-open', open);
+    syncSidebarA11y();
+}
+
+/** Drawer ที่ปิดอยู่ถูกซ่อนด้วย transform → ต้องกันไม่ให้ Tab/โปรแกรมอ่านจอเข้าถึงด้วย */
+function syncSidebarA11y() {
+    ui.statsSidebar.inert = !desktopQuery.matches && !document.body.classList.contains('sidebar-open');
 }
 
 /* ==========================================================================
@@ -522,6 +680,7 @@ async function confirmDelete() {
     }
     hide(ui.deleteModal);
     state.deleteContext = { targetNode: null, parentNode: null };
+    state.activePath = null;
     await applyChange(state.isLiveSync
         ? `ลบ "${targetNode.name}" ออกจากดิสก์เครื่องจริงแล้ว`
         : `ลบ "${targetNode.name}" แล้ว (ในระบบจำลอง)`);
@@ -721,19 +880,19 @@ function bindEvents() {
         modal.addEventListener('click', (e) => { if (e.target === modal) hide(modal); });
     }
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') { closeAllModals(); hide(ui.exportDropdown); }
+        if (e.key === 'Escape') {
+            const modalOpen = MODALS().some((m) => !m.classList.contains('hidden'));
+            closeAllModals(); hide(ui.exportDropdown);
+            if (!modalOpen && isDrawerOpen()) setSidebar(false);
+        }
         if (e.key === 'Enter' && e.target === ui.createModalInputName) { e.preventDefault(); submitCreate(); }
     });
 
     // แถบด้านข้าง
-    ui.toggleSidebarBtn.addEventListener('click', () => {
-        ui.statsSidebar.classList.add('-ml-64');
-        show(ui.expandSidebarBtn);
-    });
-    ui.expandSidebarBtn.addEventListener('click', () => {
-        ui.statsSidebar.classList.remove('-ml-64');
-        hide(ui.expandSidebarBtn);
-    });
+    ui.toggleSidebarBtn.addEventListener('click', () => setSidebar(false));
+    ui.expandSidebarBtn.addEventListener('click', () => setSidebar(true));
+    ui.sidebarBackdrop.addEventListener('click', () => setSidebar(false));
+    desktopQuery.addEventListener('change', () => { document.body.classList.remove('sidebar-open'); syncSidebarA11y(); });
 
     // ดักข้อผิดพลาดที่หลุดมา แทนที่จะเงียบหาย
     window.addEventListener('unhandledrejection', (e) => {
@@ -746,6 +905,8 @@ function init() {
     if (!isLiveSyncSupported()) show(ui.fsApiNotSupportedNotice);
     bindEvents();
     setupPanZoom();
+    setupResizeHandling();
+    syncSidebarA11y();
     updateExportState();
 }
 

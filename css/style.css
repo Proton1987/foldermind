@@ -99,14 +99,481 @@
     cursor: pointer;
 }
 
-@media (hover: none) {
-    .node-actions {
-        opacity: 1;
-        pointer-events: auto;
-    }
-}
-
 /* ให้ลาก/แพนด้วยนิ้วบนมือถือได้ (ใช้ร่วมกับ Pointer Events) */
 #mindmapContainer {
     touch-action: none;
+}
+
+
+/* ==========================================================================
+   Responsive
+   จุดตัดหลัก: <640 มือถือ | 640-1023 แท็บเล็ต | >=1024 แล็ปท็อป | >=1280 จอใหญ่
+   ========================================================================== */
+
+/* ความสูงเต็มจอ: ใช้ dvh เพื่อไม่ให้ถูกแถบ URL ของมือถือบัง */
+.app-shell {
+    height: 100vh;
+    height: 100dvh;
+}
+
+button {
+    touch-action: manipulation;
+}
+
+/* ตัดดีเลย์ดับเบิลแท็ป */
+
+/* ---- Header ---- */
+.app-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 0.75rem;
+    padding: 0.5rem max(0.75rem, env(safe-area-inset-right)) 0.5rem max(0.75rem, env(safe-area-inset-left));
+}
+
+.app-header__brand {
+    min-width: 0;
+}
+
+.app-header__actions {
+    margin-left: auto;
+}
+
+.app-header__middle {
+    /* มือถือ/แท็บเล็ต: แถวที่ 2 เต็มความกว้าง */
+    order: 3;
+    flex: 1 1 100%;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.search-box {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.search-box>svg,
+.search-box>button {
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+@media (min-width: 1024px) {
+
+    /* แล็ปท็อป: แถวเดียว */
+    .app-header {
+        flex-wrap: nowrap;
+        min-height: 4rem;
+        padding-block: 0.25rem;
+        padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));
+    }
+
+    .app-header__middle {
+        order: 0;
+        flex: 0 1 auto;
+    }
+
+    .search-box {
+        flex: 0 0 12rem;
+    }
+}
+
+@media (min-width: 1280px) {
+    .search-box {
+        flex-basis: 16rem;
+    }
+}
+
+/* ---- Sub-bar ---- */
+.app-subbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.25rem 0.75rem;
+    min-height: 2.5rem;
+    padding: 0.25rem max(0.75rem, env(safe-area-inset-right)) 0.25rem max(0.75rem, env(safe-area-inset-left));
+}
+
+.app-subbar__info {
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+
+.app-subbar__info>* {
+    flex-shrink: 0;
+}
+
+.app-subbar__info>.root-name {
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: min(20rem, 45vw);
+}
+
+.app-subbar__tools {
+    margin-left: auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+@media (min-width: 640px) {
+
+    .app-subbar,
+    .app-header {
+        padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));
+    }
+}
+
+/* ---- Sidebar: แถบข้าง (>=1024) / Drawer (<1024) ---- */
+#statsSidebar {
+    width: 16rem;
+}
+
+#sidebarBackdrop {
+    display: none;
+}
+
+#expandSidebarBtn {
+    display: none;
+}
+
+body:not(.has-tree) #expandSidebarBtn {
+    display: none !important;
+}
+
+@media (min-width: 1024px) {
+    body.sidebar-collapsed #statsSidebar {
+        margin-left: -16rem;
+    }
+
+    body.sidebar-collapsed.has-tree #expandSidebarBtn {
+        display: block;
+    }
+
+    body.sidebar-collapsed.has-tree #treeContainer {
+        padding-top: 4rem;
+    }
+}
+
+@media (max-width: 1023.98px) {
+    #statsSidebar {
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 45;
+        width: min(18rem, 85vw);
+        padding-left: env(safe-area-inset-left);
+        transform: translateX(-102%);
+        transition: transform 0.25s ease;
+        box-shadow: none;
+    }
+
+    body.sidebar-open #statsSidebar {
+        transform: none;
+        box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
+    }
+
+    #sidebarBackdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 40;
+        background: rgba(0, 0, 0, 0.55);
+    }
+
+    body.sidebar-open #sidebarBackdrop {
+        display: block;
+    }
+
+    body.has-tree:not(.sidebar-open) #expandSidebarBtn {
+        display: block;
+    }
+
+    #treeContainer {
+        padding-top: 4rem;
+    }
+
+    /* กันทับปุ่มเปิด Drawer */
+}
+
+/* ---- Hero (หน้าแรก) ---- */
+#emptyState>div {
+    margin-block: auto;
+}
+
+@media (max-height: 520px) {
+    #emptyState .hero-icon {
+        display: none;
+    }
+
+    #emptyState>div {
+        padding: 1rem 1.25rem;
+    }
+
+    #emptyState h2 {
+        font-size: 1.125rem;
+        margin-bottom: 0.25rem;
+    }
+
+    #emptyState p {
+        margin-bottom: 0.75rem;
+    }
+}
+
+/* ---- Modal: เลื่อนได้เมื่อจอเตี้ย (เช่น มือถือแนวนอน / มีคีย์บอร์ด) ---- */
+#createModal>div,
+#deleteModal>div,
+#asciiModal>div {
+    max-height: calc(100vh - 1.5rem);
+    max-height: calc(100dvh - 1.5rem);
+}
+
+#createModal>div,
+#deleteModal>div {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+#createModal,
+#deleteModal,
+#asciiModal {
+    padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+}
+
+@media (max-height: 520px) {
+
+    #createModal,
+    #deleteModal,
+    #asciiModal {
+        padding: 0.5rem;
+        align-items: flex-start;
+        overflow-y: auto;
+    }
+
+    #createModal>div,
+    #deleteModal>div {
+        max-height: none;
+        margin-inline: auto;
+    }
+}
+
+#exportDropdown {
+    max-width: calc(100vw - 1.5rem);
+}
+
+/* ---- Toast: อยู่ในจอเสมอ และไม่บังการแตะ ---- */
+#toast {
+    pointer-events: none;
+    max-width: min(28rem, calc(100vw - 1.5rem));
+    right: max(1rem, env(safe-area-inset-right));
+    bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+@media (max-width: 639.98px) {
+    #toast {
+        left: 0.75rem;
+        right: 0.75rem;
+    }
+}
+
+/* ---- Tree view: ย่อการเยื้องบนจอเล็ก ---- */
+#treeContent .tree-row {
+    padding-left: calc(var(--depth, 0) * var(--indent, 20px) + 8px);
+}
+
+.tree-children {
+    margin-left: 1rem;
+    border-left: 1px solid rgba(30, 41, 59, 0.8);
+}
+
+#treeContent {
+    --indent: 8px;
+}
+
+@media (min-width: 640px) {
+    #treeContent {
+        --indent: 20px;
+    }
+
+    .tree-children {
+        margin-left: 1rem;
+    }
+}
+
+@media (max-width: 639.98px) {
+    .tree-children {
+        margin-left: 0.5rem;
+    }
+}
+
+@media (max-width: 479.98px) {
+    #treeContent .count-badge {
+        display: none;
+    }
+}
+
+/* ---- Mind map: โหนดที่เลือก + แถบเครื่องมือสำหรับสัมผัส ---- */
+.mindmap-node.is-active rect {
+    stroke-width: 3;
+    stroke-opacity: 1;
+}
+
+.node-action-bar {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 25;
+    bottom: max(0.75rem, env(safe-area-inset-bottom));
+    max-width: calc(100% - 1.5rem);
+    display: none;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.625rem;
+}
+
+.node-action-bar__name {
+    font-size: 0.75rem;
+    color: #cbd5e1;
+    min-width: 0;
+    max-width: 9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: ui-monospace, monospace;
+}
+
+.node-action-bar button {
+    min-height: 2.5rem;
+    min-width: 2.5rem;
+    padding: 0 0.75rem;
+    border-radius: 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    border: 1px solid;
+    white-space: nowrap;
+}
+
+/* ---- อุปกรณ์สัมผัส (ไม่มี hover) ---- */
+@media (hover: none) {
+    .node-actions {
+        display: none;
+    }
+
+    /* ปุ่ม SVG เล็กเกินแตะ → ใช้แถบเครื่องมือแทน */
+    .node-action-bar:not(.hidden) {
+        display: flex;
+    }
+}
+
+@media (pointer: coarse) {
+
+    .app-header button,
+    .app-subbar button,
+    #exportDropdown button,
+    #createModal button,
+    #deleteModal button,
+    #asciiModal button,
+    #emptyState button,
+    #treeContent button,
+    #statsSidebar button {
+        min-height: 2.25rem;
+        min-width: 2.25rem;
+    }
+
+    #exportDropdown button {
+        min-height: 2.75rem;
+    }
+
+    .search-box input {
+        min-height: 2.5rem;
+    }
+
+    input[type="text"] {
+        font-size: 16px !important;
+    }
+
+    /* iOS จะซูมหน้าถ้า font < 16px */
+    #treeContent .tree-row {
+        min-height: 2.5rem;
+    }
+}
+
+/* ---- มือถือแนวนอน / จอเตี้ย: header แถวเดียว ประหยัดพื้นที่ ---- */
+@media (max-height: 520px) and (orientation: landscape) {
+    .app-header {
+        flex-wrap: nowrap;
+        min-height: 0;
+        padding-block: 0.25rem;
+        gap: 0.5rem;
+    }
+
+    .app-header__middle {
+        order: 0;
+        flex: 1 1 auto;
+    }
+
+    .app-header__brand>div:first-child {
+        width: 2rem;
+        height: 2rem;
+    }
+
+    .app-subbar {
+        min-height: 0;
+        padding-block: 0.125rem;
+    }
+}
+
+@media (max-height: 520px) and (orientation: landscape) and (max-width: 700px) {
+    .brand-text {
+        display: none;
+    }
+}
+
+/* ---- จอแคบมาก (<=359px): ย่อโลโก้/ช่องไฟให้ปุ่มทั้งหมดอยู่แถวเดียว ---- */
+@media (max-width: 359.98px) {
+    .app-header {
+        column-gap: 0.5rem;
+    }
+
+    .app-header__brand {
+        gap: 0.5rem;
+    }
+
+    .app-header__brand>div:first-child {
+        width: 2rem;
+        height: 2rem;
+    }
+
+    .app-header__actions {
+        gap: 0.25rem;
+    }
+
+    .app-header__actions button {
+        padding-inline: 0.5rem;
+    }
+}
+
+/* ---- มือถือแนวนอน (จอเตี้ย + ไม่กว้างมาก): ปุ่มแสดงไอคอนอย่างเดียว ให้ header เหลือแถวเดียว ---- */
+@media (max-height: 520px) and (orientation: landscape) and (max-width: 900px) {
+    .app-header button>span[class*="inline"] {
+        display: none;
+    }
+}
+
+/* ---- Toast บนอุปกรณ์สัมผัส/จอเล็ก: ย้ายขึ้นด้านบน ไม่ให้ทับปุ่มใน modal และแถบเครื่องมือด้านล่าง ---- */
+@media (hover: none),
+(max-width: 639.98px),
+(max-height: 520px) {
+    #toast {
+        top: max(0.75rem, env(safe-area-inset-top));
+        bottom: auto;
+    }
 }
