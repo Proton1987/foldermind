@@ -1,5 +1,5 @@
 /**
- * app.js — โค้ดหลัก FolderMind Pro v3.1 (ตรวจสอบและแก้ไขสมบูรณ์แล้ว)
+ * app.js — โค้ดหลัก FolderMind Pro v3.1 (จัดลำดับฟังก์ชันและแก้ไขข้อผิดพลาดสมบูรณ์)
  */
 import {
     isLiveSyncSupported, pickLiveDirectory, readDirectoryHandle, readDroppedItems, readFileList,
@@ -444,7 +444,7 @@ function setupResizeHandling() {
 }
 
 /* ==========================================================================
-   Node Action Bar
+   Node Action Bar & Helper Functions
    ========================================================================== */
 
 function findByPath(node, path) {
@@ -525,7 +525,7 @@ function syncSidebarA11y() {
 }
 
 /* ==========================================================================
-   Disk Loading & Auto Refresh on Focus
+   Disk Loading & Auto Refresh on Focus (ประกาศไว้ก่อน bindEvents)
    ========================================================================== */
 
 async function handleOpenLiveSync() {
@@ -906,7 +906,7 @@ function exportAsJSON() {
 }
 
 /* ==========================================================================
-   Event Binding & Initialization
+   Event Binding & Initialization (ประกาศไว้หลังฟังก์ชันทั้งหมดที่ถูกเรียก)
    ========================================================================== */
 
 function bindEvents() {
