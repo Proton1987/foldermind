@@ -1,6 +1,5 @@
 /**
- * app.js — โค้ดหลัก FolderMind Pro v3.1
- * รวมทุกฟีเจอร์: PWA, Light/Dark Theme, LocalStorage, Disk Focus Refresh, Legend Filter, Rename & Keyboard Navigation
+ * app.js — โค้ดหลัก FolderMind Pro v3.1 (ตรวจสอบและแก้ไขสมบูรณ์แล้ว)
  */
 import {
     isLiveSyncSupported, pickLiveDirectory, readDirectoryHandle, readDroppedItems, readFileList,
@@ -23,9 +22,9 @@ const state = {
     treeData: null,
     rootHandle: null,
     isLiveSync: false,
-    activeView: localStorage.getItem('foldermind_view') || 'mindmap',   // 'mindmap' | 'tree'
+    activeView: localStorage.getItem('foldermind_view') || 'mindmap',
     searchQuery: '',
-    filterCategory: null,    // หมวดหมู่ที่เลือกกรองจาก Legend (ข้อ 5)
+    filterCategory: null,
     zoom: 1,
     panX: 80,
     panY: 300,
@@ -63,15 +62,15 @@ const IDS = [
 const ui = {};
 for (const id of IDS) {
     ui[id] = document.getElementById(id);
-    if (!ui[id]) console.error(`[FolderMind] ไม่พบ element #${id}`);
+    if (!ui[id]) console.warn(`[FolderMind] ไม่พบ element #${id}`);
 }
 
-const show = (el) => el.classList.remove('hidden');
-const hide = (el) => el.classList.add('hidden');
+const show = (el) => el?.classList.remove('hidden');
+const hide = (el) => el?.classList.add('hidden');
 const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
 
 /* ==========================================================================
-   Theme Management (ข้อ 8) & LocalStorage (ข้อ 7)
+   Theme Management & LocalStorage
    ========================================================================== */
 
 function initTheme() {
@@ -101,7 +100,7 @@ function toggleTheme() {
 }
 
 /* ==========================================================================
-   Toast / Mode badge
+   Toast & Mode Badge
    ========================================================================== */
 
 const TOAST_ICONS = {
@@ -112,6 +111,7 @@ const TOAST_ICONS = {
 let toastTimer = 0;
 
 function showToast(message, type = 'info') {
+    if (!ui.toast || !ui.toastMsg || !ui.toastIcon) return;
     const [color, d] = TOAST_ICONS[type] ?? TOAST_ICONS.info;
     ui.toastMsg.textContent = message;
     ui.toastIcon.innerHTML = `<svg class="w-5 h-5 ${color}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${d}"></path></svg>`;
@@ -132,6 +132,7 @@ const MODES = {
 };
 
 function setMode(mode) {
+    if (!ui.modeBadge) return;
     const [cls, dot, text] = MODES[mode];
     ui.modeBadge.className = `flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium border ${cls}`;
     const dotEl = document.createElement('span');
@@ -206,13 +207,16 @@ const BADGES = {
 };
 
 function renderStats() {
+    if (!ui.statRootName) return;
     const { stats, treeData } = state;
     ui.statRootName.textContent = treeData.name;
     ui.statSummary.textContent = `${stats.totalFiles.toLocaleString()} ไฟล์, ${stats.totalFolders.toLocaleString()} โฟลเดอร์`;
     ui.statFilesCount.textContent = stats.totalFiles.toLocaleString();
     ui.statFoldersCount.textContent = stats.totalFolders.toLocaleString();
     ui.statTotalSize.textContent = formatBytes(stats.totalSize);
-    for (const [cat, id] of Object.entries(BADGES)) ui[id].textContent = stats.categories[cat].toLocaleString();
+    for (const [cat, id] of Object.entries(BADGES)) {
+        if (ui[id]) ui[id].textContent = stats.categories[cat].toLocaleString();
+    }
 
     const top = [...stats.extensions].sort((a, b) => b[1] - a[1]).slice(0, 7);
     if (top.length === 0) {
@@ -341,6 +345,7 @@ function fitToScreen(mode = 'full') {
 
 function setupPanZoom() {
     const container = ui.mindmapContainer;
+    if (!container) return;
     const pointers = new Map();
     let drag = null;
     let pinch = null;
@@ -415,12 +420,13 @@ function setupPanZoom() {
         zoomAt(p.x, p.y, e.deltaY < 0 ? 1.1 : 1 / 1.1);
     }, { passive: false });
 
-    ui.zoomInBtn.addEventListener('click', () => zoomAt(container.clientWidth / 2, container.clientHeight / 2, 1.2));
-    ui.zoomOutBtn.addEventListener('click', () => zoomAt(container.clientWidth / 2, container.clientHeight / 2, 1 / 1.2));
-    ui.zoomFitBtn.addEventListener('click', () => fitToScreen('full'));
+    ui.zoomInBtn?.addEventListener('click', () => zoomAt(container.clientWidth / 2, container.clientHeight / 2, 1.2));
+    ui.zoomOutBtn?.addEventListener('click', () => zoomAt(container.clientWidth / 2, container.clientHeight / 2, 1 / 1.2));
+    ui.zoomFitBtn?.addEventListener('click', () => fitToScreen('full'));
 }
 
 function setupResizeHandling() {
+    if (!ui.mindmapContainer) return;
     let lastW = 0, lastH = 0;
     new ResizeObserver(([entry]) => {
         const { width: w, height: h } = entry.contentRect;
@@ -460,6 +466,7 @@ const resolveActive = () => (state.activePath && state.treeData ? findByPath(sta
 
 function updateActionBar() {
     const bar = ui.nodeActionBar;
+    if (!bar) return;
     const node = state.activeView === 'mindmap' ? resolveActive() : null;
     if (!node) { hide(bar); bar.replaceChildren(); return; }
 
@@ -512,11 +519,13 @@ function setSidebar(open) {
 }
 
 function syncSidebarA11y() {
-    ui.statsSidebar.inert = !desktopQuery.matches && !document.body.classList.contains('sidebar-open');
+    if (ui.statsSidebar) {
+        ui.statsSidebar.inert = !desktopQuery.matches && !document.body.classList.contains('sidebar-open');
+    }
 }
 
 /* ==========================================================================
-   Disk Loading & Auto Refresh on Focus (ข้อ 3)
+   Disk Loading & Auto Refresh on Focus
    ========================================================================== */
 
 async function handleOpenLiveSync() {
@@ -610,7 +619,7 @@ function handleFolderInput(e) {
 }
 
 /* ==========================================================================
-   Modals: Create, Rename, Delete (ข้อ 2, ข้อ 4)
+   Modals: Create, Rename, Delete
    ========================================================================== */
 
 const MODALS = () => [ui.createModal, ui.renameModal, ui.deleteModal, ui.asciiModal];
@@ -619,28 +628,36 @@ const closeAllModals = () => MODALS().forEach(hide);
 function setCreateType(type) {
     state.createContext.type = type;
     const isFile = type === 'file';
-    ui.createTypeFileBtn.className = isFile 
-        ? 'flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-indigo-500 bg-indigo-600/20 text-indigo-200 font-medium transition-all'
-        : 'flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 font-medium transition-all';
-    ui.createTypeFolderBtn.className = isFile 
-        ? 'flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 font-medium transition-all'
-        : 'flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-amber-500 bg-amber-600/20 text-amber-200 font-medium transition-all';
-    ui.createModalNameLabel.textContent = isFile ? 'ชื่อไฟล์ใหม่ (เช่น script.js):' : 'ชื่อโฟลเดอร์ใหม่:';
-    ui.createModalInputName.placeholder = isFile ? 'script.js' : 'components';
+    if (ui.createTypeFileBtn) {
+        ui.createTypeFileBtn.className = isFile 
+            ? 'flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-indigo-500 bg-indigo-600/20 text-indigo-200 font-medium transition-all'
+            : 'flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 font-medium transition-all';
+    }
+    if (ui.createTypeFolderBtn) {
+        ui.createTypeFolderBtn.className = isFile 
+            ? 'flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 font-medium transition-all'
+            : 'flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-amber-500 bg-amber-600/20 text-amber-200 font-medium transition-all';
+    }
+    if (ui.createModalNameLabel) {
+        ui.createModalNameLabel.textContent = isFile ? 'ชื่อไฟล์ใหม่ (เช่น script.js):' : 'ชื่อโฟลเดอร์ใหม่:';
+    }
+    if (ui.createModalInputName) {
+        ui.createModalInputName.placeholder = isFile ? 'script.js' : 'components';
+    }
 }
 
 function openCreateModal(targetNode, type = 'file') {
     state.createContext.targetNode = targetNode;
-    ui.createModalTargetPath.textContent = targetNode.path;
-    ui.createModalInputName.value = '';
+    if (ui.createModalTargetPath) ui.createModalTargetPath.textContent = targetNode.path;
+    if (ui.createModalInputName) ui.createModalInputName.value = '';
     setCreateType(type);
     show(ui.createModal);
-    ui.createModalInputName.focus();
+    ui.createModalInputName?.focus();
 }
 
 async function submitCreate() {
     if (state.busy) return;
-    const name = ui.createModalInputName.value.trim();
+    const name = ui.createModalInputName?.value.trim();
     const { targetNode, type } = state.createContext;
     const invalid = validateEntryName(name);
     if (invalid) { showToast(invalid, 'error'); return; }
@@ -661,15 +678,17 @@ async function submitCreate() {
 
 function openRenameModal(targetNode, parentNode) {
     state.renameContext = { targetNode, parentNode };
-    ui.renameModalInput.value = targetNode.name;
-    show(ui.renameModal);
-    ui.renameModalInput.focus();
-    ui.renameModalInput.select();
+    if (ui.renameModalInput) {
+        ui.renameModalInput.value = targetNode.name;
+        show(ui.renameModal);
+        ui.renameModalInput.focus();
+        ui.renameModalInput.select();
+    }
 }
 
 async function submitRename() {
     if (state.busy) return;
-    const newName = ui.renameModalInput.value.trim();
+    const newName = ui.renameModalInput?.value.trim();
     const { targetNode, parentNode } = state.renameContext;
     const invalid = validateEntryName(newName);
     if (invalid) { showToast(invalid, 'error'); return; }
@@ -689,19 +708,23 @@ async function submitRename() {
 
 function openDeleteModal(targetNode, parentNode) {
     state.deleteContext = { targetNode, parentNode };
-    ui.deleteModalTargetName.textContent = targetNode.name;
-    ui.deleteModalWarnSync.classList.toggle('hidden', !state.isLiveSync);
+    if (ui.deleteModalTargetName) ui.deleteModalTargetName.textContent = targetNode.name;
+    ui.deleteModalWarnSync?.classList.toggle('hidden', !state.isLiveSync);
 
     const hasChildren = targetNode.type === 'directory' && (targetNode.children?.length ?? 0) > 0;
     if (hasChildren || state.isLiveSync) {
         show(ui.deleteConfirmInputContainer);
-        ui.deleteConfirmInput.value = '';
-        ui.confirmDeleteBtn.disabled = true;
-        ui.confirmDeleteBtn.className = 'px-4 py-2 rounded-xl bg-rose-600/50 cursor-not-allowed text-white text-xs font-semibold shadow-lg transition-all';
+        if (ui.deleteConfirmInput) ui.deleteConfirmInput.value = '';
+        if (ui.confirmDeleteBtn) {
+            ui.confirmDeleteBtn.disabled = true;
+            ui.confirmDeleteBtn.className = 'px-4 py-2 rounded-xl bg-rose-600/50 cursor-not-allowed text-white text-xs font-semibold shadow-lg transition-all';
+        }
     } else {
         hide(ui.deleteConfirmInputContainer);
-        ui.confirmDeleteBtn.disabled = false;
-        ui.confirmDeleteBtn.className = 'px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-lg transition-all';
+        if (ui.confirmDeleteBtn) {
+            ui.confirmDeleteBtn.disabled = false;
+            ui.confirmDeleteBtn.className = 'px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-lg transition-all';
+        }
     }
     show(ui.deleteModal);
 }
@@ -726,14 +749,14 @@ async function confirmDelete() {
 }
 
 /* ==========================================================================
-   Keyboard Navigation (ข้อ 9)
+   Keyboard Navigation
    ========================================================================== */
 
 function setupKeyboardNavigation() {
     document.addEventListener('keydown', (e) => {
         if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
 
-        const modalOpen = MODALS().some((m) => !m.classList.contains('hidden'));
+        const modalOpen = MODALS().some((m) => !m?.classList.contains('hidden'));
         if (e.key === 'Escape') {
             closeAllModals(); hide(ui.exportDropdown);
             if (!modalOpen && isDrawerOpen()) setSidebar(false);
@@ -778,9 +801,11 @@ function setupKeyboardNavigation() {
 
 function updateExportState() {
     const hasData = Boolean(state.treeData);
-    ui.exportMenuBtn.disabled = !hasData;
-    ui.exportMenuBtn.classList.toggle('opacity-50', !hasData);
-    ui.exportMenuBtn.classList.toggle('cursor-not-allowed', !hasData);
+    if (ui.exportMenuBtn) {
+        ui.exportMenuBtn.disabled = !hasData;
+        ui.exportMenuBtn.classList.toggle('opacity-50', !hasData);
+        ui.exportMenuBtn.classList.toggle('cursor-not-allowed', !hasData);
+    }
 }
 
 const safeName = (s) => s.replace(/[\\/:*?"<>|]+/g, '_');
@@ -863,12 +888,12 @@ function exportAsPNG() {
 
 function openAsciiModal() {
     if (!state.treeData) return;
-    ui.asciiText.textContent = generateAsciiTree(state.treeData);
+    if (ui.asciiText) ui.asciiText.textContent = generateAsciiTree(state.treeData);
     show(ui.asciiModal);
 }
 
 async function copyAscii() {
-    const ok = await copyText(ui.asciiText.textContent);
+    const ok = await copyText(ui.asciiText?.textContent);
     showToast(ok ? 'คัดลอกโครงสร้าง ASCII สำเร็จ' : 'คัดลอกไม่สำเร็จ', ok ? 'success' : 'error');
     if (ok) hide(ui.asciiModal);
 }
@@ -885,37 +910,41 @@ function exportAsJSON() {
    ========================================================================== */
 
 function bindEvents() {
-    ui.themeToggleBtn.addEventListener('click', toggleTheme);
+    ui.themeToggleBtn?.addEventListener('click', toggleTheme);
 
-    ui.openLiveSyncBtn.addEventListener('click', handleOpenLiveSync);
-    ui.heroLiveSyncBtn.addEventListener('click', handleOpenLiveSync);
-    ui.selectFolderBtn.addEventListener('click', () => ui.folderInput.click());
-    ui.heroUploadBtn.addEventListener('click', () => ui.folderInput.click());
-    ui.folderInput.addEventListener('change', handleFolderInput);
-    ui.demoDataBtn.addEventListener('click', () => loadSource({
+    // ผูก Event ให้ครบทั้งปุ่มบน Header และปุ่มตรงกลางหน้า Hero
+    ui.openLiveSyncBtn?.addEventListener('click', handleOpenLiveSync);
+    ui.heroLiveSyncBtn?.addEventListener('click', handleOpenLiveSync);
+
+    ui.selectFolderBtn?.addEventListener('click', () => ui.folderInput?.click());
+    ui.heroUploadBtn?.addEventListener('click', () => ui.folderInput?.click());
+    ui.folderInput?.addEventListener('change', handleFolderInput);
+    ui.demoDataBtn?.addEventListener('click', () => loadSource({
         message: 'กำลังโหลดข้อมูลตัวอย่าง...', mode: 'demo', read: async () => buildDemoTree()
     }));
     setupDragAndDrop();
 
-    ui.viewMindmapBtn.addEventListener('click', () => switchView('mindmap'));
-    ui.viewTreeBtn.addEventListener('click', () => switchView('tree'));
+    ui.viewMindmapBtn?.addEventListener('click', () => switchView('mindmap'));
+    ui.viewTreeBtn?.addEventListener('click', () => switchView('tree'));
 
     let searchTimer = 0;
-    ui.searchInput.addEventListener('input', (e) => {
-        ui.clearSearchBtn.classList.toggle('hidden', !e.target.value.trim());
+    ui.searchInput?.addEventListener('input', (e) => {
+        ui.clearSearchBtn?.classList.toggle('hidden', !e.target.value.trim());
         clearTimeout(searchTimer);
         searchTimer = setTimeout(() => {
             state.searchQuery = e.target.value.toLowerCase().trim();
             renderActiveView();
         }, 120);
     });
-    ui.clearSearchBtn.addEventListener('click', () => {
+    ui.clearSearchBtn?.addEventListener('click', () => {
         clearTimeout(searchTimer);
-        ui.searchInput.value = ''; state.searchQuery = '';
-        hide(ui.clearSearchBtn); renderActiveView();
+        if (ui.searchInput) ui.searchInput.value = '';
+        state.searchQuery = '';
+        hide(ui.clearSearchBtn);
+        renderActiveView();
     });
 
-    ui.legendContainer.addEventListener('click', (e) => {
+    ui.legendContainer?.addEventListener('click', (e) => {
         const item = e.target.closest('.legend-filter-item');
         if (!item) return;
         const cat = item.getAttribute('data-category');
@@ -930,46 +959,48 @@ function bindEvents() {
         renderActiveView();
     });
 
-    ui.expandAllBtn.addEventListener('click', () => setAllCollapsed(false));
-    ui.collapseAllBtn.addEventListener('click', () => setAllCollapsed(true));
+    ui.expandAllBtn?.addEventListener('click', () => setAllCollapsed(false));
+    ui.collapseAllBtn?.addEventListener('click', () => setAllCollapsed(true));
 
-    ui.exportMenuBtn.addEventListener('click', (e) => { e.stopPropagation(); ui.exportDropdown.classList.toggle('hidden'); });
+    ui.exportMenuBtn?.addEventListener('click', (e) => { e.stopPropagation(); ui.exportDropdown?.classList.toggle('hidden'); });
     document.addEventListener('click', () => hide(ui.exportDropdown));
-    ui.exportPngBtn.addEventListener('click', exportAsPNG);
-    ui.exportSvgBtn.addEventListener('click', exportAsSVG);
-    ui.exportAsciiBtn.addEventListener('click', openAsciiModal);
-    ui.exportJsonBtn.addEventListener('click', exportAsJSON);
-    ui.copyAsciiBtn.addEventListener('click', copyAscii);
-    ui.closeAsciiModal.addEventListener('click', () => hide(ui.asciiModal));
+    ui.exportPngBtn?.addEventListener('click', exportAsPNG);
+    ui.exportSvgBtn?.addEventListener('click', exportAsSVG);
+    ui.exportAsciiBtn?.addEventListener('click', openAsciiModal);
+    ui.exportJsonBtn?.addEventListener('click', exportAsJSON);
+    ui.copyAsciiBtn?.addEventListener('click', copyAscii);
+    ui.closeAsciiModal?.addEventListener('click', () => hide(ui.asciiModal));
 
-    ui.createTypeFileBtn.addEventListener('click', () => setCreateType('file'));
-    ui.createTypeFolderBtn.addEventListener('click', () => setCreateType('folder'));
-    ui.submitCreateBtn.addEventListener('click', submitCreate);
-    ui.cancelCreateBtn.addEventListener('click', () => hide(ui.createModal));
-    ui.closeCreateModal.addEventListener('click', () => hide(ui.createModal));
+    ui.createTypeFileBtn?.addEventListener('click', () => setCreateType('file'));
+    ui.createTypeFolderBtn?.addEventListener('click', () => setCreateType('folder'));
+    ui.submitCreateBtn?.addEventListener('click', submitCreate);
+    ui.cancelCreateBtn?.addEventListener('click', () => hide(ui.createModal));
+    ui.closeCreateModal?.addEventListener('click', () => hide(ui.createModal));
 
-    ui.submitRenameBtn.addEventListener('click', submitRename);
-    ui.cancelRenameBtn.addEventListener('click', () => hide(ui.renameModal));
-    ui.closeRenameModal.addEventListener('click', () => hide(ui.renameModal));
+    ui.submitRenameBtn?.addEventListener('click', submitRename);
+    ui.cancelRenameBtn?.addEventListener('click', () => hide(ui.renameModal));
+    ui.closeRenameModal?.addEventListener('click', () => hide(ui.renameModal));
 
-    ui.deleteConfirmInput.addEventListener('input', (e) => {
+    ui.deleteConfirmInput?.addEventListener('input', (e) => {
         const targetName = state.deleteContext.targetNode?.name || '';
         const match = e.target.value.trim() === targetName;
-        ui.confirmDeleteBtn.disabled = !match;
-        ui.confirmDeleteBtn.className = match
-            ? 'px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-lg transition-all'
-            : 'px-4 py-2 rounded-xl bg-rose-600/50 cursor-not-allowed text-white text-xs font-semibold shadow-lg transition-all';
+        if (ui.confirmDeleteBtn) {
+            ui.confirmDeleteBtn.disabled = !match;
+            ui.confirmDeleteBtn.className = match
+                ? 'px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-lg transition-all'
+                : 'px-4 py-2 rounded-xl bg-rose-600/50 cursor-not-allowed text-white text-xs font-semibold shadow-lg transition-all';
+        }
     });
-    ui.confirmDeleteBtn.addEventListener('click', confirmDelete);
-    ui.cancelDeleteBtn.addEventListener('click', () => hide(ui.deleteModal));
+    ui.confirmDeleteBtn?.addEventListener('click', confirmDelete);
+    ui.cancelDeleteBtn?.addEventListener('click', () => hide(ui.deleteModal));
 
     for (const modal of MODALS()) {
-        modal.addEventListener('click', (e) => { if (e.target === modal) hide(modal); });
+        modal?.addEventListener('click', (e) => { if (e.target === modal) hide(modal); });
     }
 
-    ui.toggleSidebarBtn.addEventListener('click', () => setSidebar(false));
-    ui.expandSidebarBtn.addEventListener('click', () => setSidebar(true));
-    ui.sidebarBackdrop.addEventListener('click', () => setSidebar(false));
+    ui.toggleSidebarBtn?.addEventListener('click', () => setSidebar(false));
+    ui.expandSidebarBtn?.addEventListener('click', () => setSidebar(true));
+    ui.sidebarBackdrop?.addEventListener('click', () => setSidebar(false));
     desktopQuery.addEventListener('change', () => { document.body.classList.remove('sidebar-open'); syncSidebarA11y(); });
 
     setupKeyboardNavigation();
