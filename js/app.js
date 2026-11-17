@@ -248,7 +248,7 @@ const TAB_OFF = 'flex items-center gap-2 px-3 py-1.5 rounded-lg text-slate-400 h
 
 function switchView(view) {
     state.activeView = view;
-    localStorage.setItem('foldermind_view', view); // จำค่ามุมมอง (ข้อ 7)
+    localStorage.setItem('foldermind_view', view);
     const isMap = view === 'mindmap';
     ui.viewMindmapBtn.className = isMap ? TAB_ON : TAB_OFF;
     ui.viewTreeBtn.className = isMap ? TAB_OFF : TAB_ON;
@@ -504,7 +504,7 @@ const isDrawerOpen = () => !desktopQuery.matches && document.body.classList.cont
 function setSidebar(open) {
     if (desktopQuery.matches) {
         document.body.classList.toggle('sidebar-collapsed', !open);
-        localStorage.setItem('foldermind_sidebar', open ? 'open' : 'collapsed'); // จำการตั้งค่า Sidebar (ข้อ 7)
+        localStorage.setItem('foldermind_sidebar', open ? 'open' : 'collapsed');
     } else {
         document.body.classList.toggle('sidebar-open', open);
     }
@@ -518,6 +518,24 @@ function syncSidebarA11y() {
 /* ==========================================================================
    Disk Loading & Auto Refresh on Focus (ข้อ 3)
    ========================================================================== */
+
+async function handleOpenLiveSync() {
+    if (!isLiveSyncSupported()) {
+        showToast('เบราว์เซอร์ของคุณไม่รองรับ File System Sync โปรดใช้ Chrome, Edge หรือ Brave', 'error');
+        return;
+    }
+    let handle;
+    try {
+        handle = await pickLiveDirectory();
+    } catch (err) {
+        if (err.name !== 'AbortError') showToast(`เปิดโฟลเดอร์ไม่สำเร็จ: ${err.message}`, 'error');
+        return;
+    }
+    await loadSource({
+        message: `กำลังอ่านโฟลเดอร์ "${handle.name}"...`, mode: 'live', handle,
+        read: () => readDirectoryHandle(handle)
+    });
+}
 
 async function loadSource({ message, mode, handle = null, read }) {
     if (state.busy) return;
@@ -551,7 +569,6 @@ async function refreshFromDisk() {
     }
 }
 
-// รีเฟรชดิสก์เมื่อกลับมาที่หน้าต่างแอป (ข้อ 3)
 window.addEventListener('focus', () => {
     if (state.isLiveSync && state.rootHandle) {
         refreshFromDisk();
@@ -675,7 +692,6 @@ function openDeleteModal(targetNode, parentNode) {
     ui.deleteModalTargetName.textContent = targetNode.name;
     ui.deleteModalWarnSync.classList.toggle('hidden', !state.isLiveSync);
 
-    // หากเป็นโฟลเดอร์ที่มีไฟล์ข้างใน หรืออยู่ในโหมด Live Sync ให้บังคับพิมพ์ชื่อยืนยัน (ข้อ 2)
     const hasChildren = targetNode.type === 'directory' && (targetNode.children?.length ?? 0) > 0;
     if (hasChildren || state.isLiveSync) {
         show(ui.deleteConfirmInputContainer);
@@ -715,7 +731,6 @@ async function confirmDelete() {
 
 function setupKeyboardNavigation() {
     document.addEventListener('keydown', (e) => {
-        // หากกำลังพิมพ์ใน input / modal ให้ข้ามชอร์ตคัททั่วไป
         if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
 
         const modalOpen = MODALS().some((m) => !m.classList.contains('hidden'));
@@ -727,10 +742,8 @@ function setupKeyboardNavigation() {
 
         if (modalOpen || !state.treeData) return;
 
-        // คีย์บอร์ดลูกศรนำทางโหนดใน Mind Map / Tree (ข้อ 9)
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
             e.preventDefault();
-            // รวบรวมโหนดทั้งหมดแบบเรียงลำดับ
             const list = [];
             (function flatten(node) {
                 list.push(node);
@@ -749,7 +762,6 @@ function setupKeyboardNavigation() {
             renderActiveView();
         }
 
-        // กด Delete เพื่อลบโหนดที่เลือก (ข้อ 9)
         if (e.key === 'Delete' && state.activePath) {
             const node = resolveActive();
             const parent = findParent(state.treeData, node);
@@ -888,7 +900,6 @@ function bindEvents() {
     ui.viewMindmapBtn.addEventListener('click', () => switchView('mindmap'));
     ui.viewTreeBtn.addEventListener('click', () => switchView('tree'));
 
-    // ค้นหา
     let searchTimer = 0;
     ui.searchInput.addEventListener('input', (e) => {
         ui.clearSearchBtn.classList.toggle('hidden', !e.target.value.trim());
@@ -904,13 +915,12 @@ function bindEvents() {
         hide(ui.clearSearchBtn); renderActiveView();
     });
 
-    // กรองประเภทไฟล์จาก Legend ด้านข้าง (ข้อ 5)
     ui.legendContainer.addEventListener('click', (e) => {
         const item = e.target.closest('.legend-filter-item');
         if (!item) return;
         const cat = item.getAttribute('data-category');
         if (state.filterCategory === cat) {
-            state.filterCategory = null; // กดซ้ำเพื่อยกเลิกตัวกรอง
+            state.filterCategory = null;
             item.classList.remove('ring-2', 'ring-white');
         } else {
             state.filterCategory = cat;
@@ -923,7 +933,6 @@ function bindEvents() {
     ui.expandAllBtn.addEventListener('click', () => setAllCollapsed(false));
     ui.collapseAllBtn.addEventListener('click', () => setAllCollapsed(true));
 
-    // Export menu
     ui.exportMenuBtn.addEventListener('click', (e) => { e.stopPropagation(); ui.exportDropdown.classList.toggle('hidden'); });
     document.addEventListener('click', () => hide(ui.exportDropdown));
     ui.exportPngBtn.addEventListener('click', exportAsPNG);
@@ -933,7 +942,6 @@ function bindEvents() {
     ui.copyAsciiBtn.addEventListener('click', copyAscii);
     ui.closeAsciiModal.addEventListener('click', () => hide(ui.asciiModal));
 
-    // Modals
     ui.createTypeFileBtn.addEventListener('click', () => setCreateType('file'));
     ui.createTypeFolderBtn.addEventListener('click', () => setCreateType('folder'));
     ui.submitCreateBtn.addEventListener('click', submitCreate);
@@ -944,7 +952,6 @@ function bindEvents() {
     ui.cancelRenameBtn.addEventListener('click', () => hide(ui.renameModal));
     ui.closeRenameModal.addEventListener('click', () => hide(ui.renameModal));
 
-    // ตรวจสอบการพิมพ์ชื่อยืนยันก่อนลบ (ข้อ 2)
     ui.deleteConfirmInput.addEventListener('input', (e) => {
         const targetName = state.deleteContext.targetNode?.name || '';
         const match = e.target.value.trim() === targetName;
