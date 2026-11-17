@@ -1,10 +1,10 @@
 /**
- * app.js — ไฟล์หลักของ FolderMind
- * เชื่อม fs-access.js (ข้อมูล) กับ render-tree.js (การแสดงผล) และจัดการ UI ทั้งหมด
+ * app.js — โค้ดหลัก FolderMind Pro v3.1
+ * รวมทุกฟีเจอร์: PWA, Light/Dark Theme, LocalStorage, Disk Focus Refresh, Legend Filter, Rename & Keyboard Navigation
  */
 import {
     isLiveSyncSupported, pickLiveDirectory, readDirectoryHandle, readDroppedItems, readFileList,
-    buildDemoTree, createEntry, deleteEntry, validateEntryName, captureCollapsed, restoreCollapsed,
+    buildDemoTree, createEntry, deleteEntry, renameEntry, validateEntryName, captureCollapsed, restoreCollapsed,
     getExtension, getCategory
 } from './fs-access.js';
 import {
@@ -17,24 +17,25 @@ import {
 
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 3;
-const LARGE_TREE_THRESHOLD = 800; // ถ้าเกินนี้ จะยุบโฟลเดอร์ชั้นลึกไว้ก่อน กัน Mind Map ค้าง
-const SVG_NS = 'http://www.w3.org/2000/svg';
+const LARGE_TREE_THRESHOLD = 800;
 
 const state = {
     treeData: null,
     rootHandle: null,
     isLiveSync: false,
-    activeView: 'mindmap',   // 'mindmap' | 'tree'
+    activeView: localStorage.getItem('foldermind_view') || 'mindmap',   // 'mindmap' | 'tree'
     searchQuery: '',
+    filterCategory: null,    // หมวดหมู่ที่เลือกกรองจาก Legend (ข้อ 5)
     zoom: 1,
     panX: 80,
     panY: 300,
-    bounds: null,            // ขอบเขตของ Mind Map ที่วาดล่าสุด
-    needsFit: false,         // true = ครั้งถัดไปที่วาด Mind Map ให้ปรับพอดีหน้าจอ
-    autoFit: false,          // 'readable' | 'full' = ยังอยู่ในโหมดพอดีจอ (จะปรับใหม่เมื่อหมุน/ย่อขยายหน้าต่าง); false = ผู้ใช้ปรับเองแล้ว
-    activePath: null,        // พาธของโหนดที่เลือกใน Mind Map (ใช้กับแถบเครื่องมือบนอุปกรณ์สัมผัส)
+    bounds: null,
+    needsFit: false,
+    autoFit: false,
+    activePath: null,
     busy: false,
     createContext: { targetNode: null, type: 'file' },
+    renameContext: { targetNode: null, parentNode: null },
     deleteContext: { targetNode: null, parentNode: null },
     stats: null
 };
@@ -47,11 +48,13 @@ const IDS = [
     'searchInput', 'clearSearchBtn', 'expandAllBtn', 'collapseAllBtn',
     'zoomInBtn', 'zoomOutBtn', 'zoomFitBtn', 'zoomLabel',
     'exportMenuBtn', 'exportDropdown', 'exportPngBtn', 'exportSvgBtn', 'exportAsciiBtn', 'exportJsonBtn',
+    'themeToggleBtn', 'themeIconLight', 'themeIconDark',
     'createModal', 'createModalTargetPath', 'createTypeFileBtn', 'createTypeFolderBtn', 'createModalInputName',
     'createModalNameLabel', 'submitCreateBtn', 'cancelCreateBtn', 'closeCreateModal',
-    'deleteModal', 'deleteModalTargetName', 'deleteModalWarnSync', 'confirmDeleteBtn', 'cancelDeleteBtn',
+    'renameModal', 'renameModalInput', 'submitRenameBtn', 'cancelRenameBtn', 'closeRenameModal',
+    'deleteModal', 'deleteModalTargetName', 'deleteModalWarnSync', 'deleteConfirmInputContainer', 'deleteConfirmInput', 'confirmDeleteBtn', 'cancelDeleteBtn',
     'asciiModal', 'asciiText', 'copyAsciiBtn', 'closeAsciiModal',
-    'statsSidebar', 'toggleSidebarBtn', 'expandSidebarBtn',
+    'statsSidebar', 'toggleSidebarBtn', 'expandSidebarBtn', 'legendContainer',
     'toast', 'toastMsg', 'toastIcon', 'nodeActionBar', 'sidebarBackdrop',
     'statRootName', 'statSummary', 'statFilesCount', 'statFoldersCount', 'statTotalSize', 'extBreakdownList',
     'badgeFolderCount', 'badgeCodeCount', 'badgeMediaCount', 'badgeDocCount', 'badgeDataCount', 'badgeArchiveCount'
@@ -60,12 +63,42 @@ const IDS = [
 const ui = {};
 for (const id of IDS) {
     ui[id] = document.getElementById(id);
-    if (!ui[id]) console.error(`[FolderMind] ไม่พบ element #${id} ใน index.html`);
+    if (!ui[id]) console.error(`[FolderMind] ไม่พบ element #${id}`);
 }
 
 const show = (el) => el.classList.remove('hidden');
 const hide = (el) => el.classList.add('hidden');
 const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+
+/* ==========================================================================
+   Theme Management (ข้อ 8) & LocalStorage (ข้อ 7)
+   ========================================================================== */
+
+function initTheme() {
+    const savedTheme = localStorage.getItem('foldermind_theme') || 'dark';
+    if (savedTheme === 'light') {
+        document.documentElement.classList.remove('dark');
+        show(ui.themeIconDark);
+        hide(ui.themeIconLight);
+    } else {
+        document.documentElement.classList.add('dark');
+        hide(ui.themeIconDark);
+        show(ui.themeIconLight);
+    }
+}
+
+function toggleTheme() {
+    const isDark = document.documentElement.classList.toggle('dark');
+    localStorage.setItem('foldermind_theme', isDark ? 'dark' : 'light');
+    if (isDark) {
+        hide(ui.themeIconDark);
+        show(ui.themeIconLight);
+    } else {
+        show(ui.themeIconDark);
+        hide(ui.themeIconLight);
+    }
+    showToast(`เปลี่ยนเป็นธีม ${isDark ? 'มืด' : 'สว่าง'} แล้ว`, 'info');
+}
 
 /* ==========================================================================
    Toast / Mode badge
@@ -85,7 +118,7 @@ function showToast(message, type = 'info') {
     ui.toast.classList.remove('translate-y-20', 'opacity-0');
     ui.toast.classList.add('translate-y-0', 'opacity-100');
 
-    clearTimeout(toastTimer); // กัน toast เก่าที่ค้างอยู่มาซ่อน toast ใหม่ก่อนเวลา
+    clearTimeout(toastTimer);
     toastTimer = setTimeout(() => {
         ui.toast.classList.remove('translate-y-0', 'opacity-100');
         ui.toast.classList.add('translate-y-20', 'opacity-0');
@@ -109,7 +142,7 @@ function setMode(mode) {
 }
 
 /* ==========================================================================
-   ข้อมูล: สถิติ / ตั้งต้นต้นไม้
+   Analysis & SetTree
    ========================================================================== */
 
 const compareNodes = (a, b) => (a.type === b.type
@@ -147,12 +180,6 @@ function collapseDeep(node, depth = 0) {
     node.children?.forEach((c) => collapseDeep(c, depth + 1));
 }
 
-/**
- * ตั้งต้นไม้ใหม่แล้ววาด
- * fresh = true  → โหลดโฟลเดอร์ใหม่ (ปรับพอดีหน้าจอ, ยุบชั้นลึกถ้าใหญ่มาก)
- * fresh = false → แค่รีเฟรชข้อมูล (คงตำแหน่ง/ซูมเดิม)
- * คืน true ถ้ามีการยุบโฟลเดอร์ชั้นลึกอัตโนมัติ
- */
 function setTree(root, { fresh = true } = {}) {
     state.stats = analyze(root);
     state.treeData = root;
@@ -203,7 +230,7 @@ function renderStats() {
         const dot = document.createElement('span');
         dot.className = 'w-2 h-2 rounded-full';
         dot.style.background = CATEGORY_COLORS[getCategory(ext)].stroke;
-        name.append(dot, `.${ext}`); // ข้อความจากชื่อไฟล์ → append แบบ text เสมอ
+        name.append(dot, `.${ext}`);
         const badge = document.createElement('span');
         badge.className = 'font-mono text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded';
         badge.textContent = String(count);
@@ -213,7 +240,7 @@ function renderStats() {
 }
 
 /* ==========================================================================
-   มุมมอง & การวาด
+   Views & Rendering
    ========================================================================== */
 
 const TAB_ON = 'flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all text-white bg-indigo-600 shadow-md';
@@ -221,6 +248,7 @@ const TAB_OFF = 'flex items-center gap-2 px-3 py-1.5 rounded-lg text-slate-400 h
 
 function switchView(view) {
     state.activeView = view;
+    localStorage.setItem('foldermind_view', view); // จำค่ามุมมอง (ข้อ 7)
     const isMap = view === 'mindmap';
     ui.viewMindmapBtn.className = isMap ? TAB_ON : TAB_OFF;
     ui.viewTreeBtn.className = isMap ? TAB_OFF : TAB_ON;
@@ -233,20 +261,17 @@ function switchView(view) {
 const viewHandlers = {
     onToggle: (node) => { node.collapsed = !node.collapsed; state.activePath = node.path; renderActiveView(); },
     onCreate: (node, type) => openCreateModal(node, type),
+    onRename: (node, parent) => openRenameModal(node, parent),
     onDelete: (node, parent) => openDeleteModal(node, parent),
     onFileClick: (node) => {
         if (state.activeView === 'mindmap') { state.activePath = node.path; renderActiveView(); }
-        if (state.activeView === 'tree') {
-            copyText(node.path).then((ok) => showToast(ok ? `คัดลอกพาธแล้ว: ${node.path}` : 'คัดลอกไม่สำเร็จ', ok ? 'success' : 'error'));
-        } else {
-            showToast(`ไฟล์: ${node.path} (${formatBytes(node.size)})`, 'info');
-        }
+        showToast(`ไฟล์: ${node.path} (${formatBytes(node.size)})`, 'info');
     }
 };
 
 const mindmapArgs = () => ({
-    root: state.treeData, query: state.searchQuery, activeNode: resolveActive(),
-    linesLayer: ui.linesLayer, nodesLayer: ui.nodesLayer, ...viewHandlers
+    root: state.treeData, query: state.searchQuery, filterCategory: state.filterCategory,
+    activeNode: resolveActive(), linesLayer: ui.linesLayer, nodesLayer: ui.nodesLayer, ...viewHandlers
 });
 
 function renderActiveView() {
@@ -257,14 +282,13 @@ function renderActiveView() {
         else applyTransform();
     } else {
         renderTree({
-            root: state.treeData, query: state.searchQuery,
+            root: state.treeData, query: state.searchQuery, filterCategory: state.filterCategory,
             container: ui.treeContent, pathLabel: ui.treePathNotice, ...viewHandlers
         });
     }
     updateActionBar();
 }
 
-/** ขยายทั้งหมด / ยุบทั้งหมด (โฟลเดอร์รากเปิดไว้เสมอ) — วาดครั้งเดียว ไม่วาดซ้ำทุกโหนดเหมือนเดิม */
 function setAllCollapsed(collapsed) {
     if (!state.treeData) return;
     (function walk(node, isRoot) {
@@ -277,7 +301,7 @@ function setAllCollapsed(collapsed) {
 }
 
 /* ==========================================================================
-   Pan & Zoom (เมาส์ / ทัชแพด / นิ้วสัมผัส + หยิกซูม)
+   Pan & Zoom
    ========================================================================== */
 
 function applyTransform() {
@@ -288,19 +312,13 @@ function applyTransform() {
 function zoomAt(px, py, factor) {
     const zoom = clamp(state.zoom * factor, MIN_ZOOM, MAX_ZOOM);
     const k = zoom / state.zoom;
-    state.panX = px - (px - state.panX) * k; // ซูมเข้าหาตำแหน่งเมาส์/จุดกึ่งกลางนิ้ว
+    state.panX = px - (px - state.panX) * k;
     state.panY = py - (py - state.panY) * k;
     state.zoom = zoom;
     state.autoFit = false;
     applyTransform();
 }
 
-/**
- * ปรับให้ Mind Map พอดีหน้าจอ
- *  mode 'full'     = เห็นทั้งแผนผัง (ปุ่ม "พอดีหน้าจอ")
- *  mode 'readable' = เหมือน full แต่ไม่ย่อจนตัวอักษรอ่านไม่ออก ถ้าแผนผังกว้างเกินจะชิดซ้ายให้เห็น root แล้วลากดูต่อ
- *                    (เดิมบนมือถือจะย่อเหลือ ~10%)
- */
 function fitToScreen(mode = 'full') {
     const { bounds } = state;
     const w = ui.mindmapContainer.clientWidth;
@@ -323,7 +341,7 @@ function fitToScreen(mode = 'full') {
 
 function setupPanZoom() {
     const container = ui.mindmapContainer;
-    const pointers = new Map();   // pointerId -> {x, y}  (รองรับหลายนิ้ว)
+    const pointers = new Map();
     let drag = null;
     let pinch = null;
     let suppressClick = false;
@@ -336,15 +354,12 @@ function setupPanZoom() {
         const [a, b] = [...pointers.values()];
         return { dist: Math.hypot(a.x - b.x, a.y - b.y), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } };
     };
-    // กันการลาก/หยิกที่จบบนโหนดถูกนับเป็นคลิก (เดิมจะยุบ/ขยายโดยไม่ตั้งใจ)
     const suppressNextClick = () => { suppressClick = true; setTimeout(() => { suppressClick = false; }, 0); };
 
     container.addEventListener('pointerdown', (e) => {
         pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-        if (pointers.size === 2) {
-            pinch = twoFingers();
-            drag = null;
-        } else if (pointers.size === 1 && e.button === 0) {
+        if (pointers.size === 2) { pinch = twoFingers(); drag = null; }
+        else if (pointers.size === 1 && e.button === 0) {
             drag = { offX: e.clientX - state.panX, offY: e.clientY - state.panY, x0: e.clientX, y0: e.clientY, moved: false };
         }
     });
@@ -380,18 +395,17 @@ function setupPanZoom() {
         const wasPinching = Boolean(pinch);
         pointers.delete(e.pointerId);
         if (pointers.size < 2) pinch = null;
-        if (wasPinching) { suppressNextClick(); drag = null; return; } // นิ้วที่เหลือไม่ลากต่อ (กันภาพกระโดด)
+        if (wasPinching) { suppressNextClick(); drag = null; return; }
         if (drag?.moved) suppressNextClick();
         drag = null;
     };
     window.addEventListener('pointerup', endPointer);
     window.addEventListener('pointercancel', endPointer);
-    window.addEventListener('blur', () => { pointers.clear(); pinch = null; drag = null; });
 
     container.addEventListener('click', (e) => {
         if (suppressClick) { e.stopPropagation(); e.preventDefault(); }
     }, true);
-    container.addEventListener('click', (e) => {       // แตะพื้นที่ว่าง = ยกเลิกการเลือกโหนด
+    container.addEventListener('click', (e) => {
         if (state.activePath && !e.target.closest('.mindmap-node')) { state.activePath = null; renderActiveView(); }
     });
 
@@ -401,22 +415,16 @@ function setupPanZoom() {
         zoomAt(p.x, p.y, e.deltaY < 0 ? 1.1 : 1 / 1.1);
     }, { passive: false });
 
-    const zoomCenter = (factor) => zoomAt(container.clientWidth / 2, container.clientHeight / 2, factor);
-    ui.zoomInBtn.addEventListener('click', () => zoomCenter(1.2));
-    ui.zoomOutBtn.addEventListener('click', () => zoomCenter(1 / 1.2));
+    ui.zoomInBtn.addEventListener('click', () => zoomAt(container.clientWidth / 2, container.clientHeight / 2, 1.2));
+    ui.zoomOutBtn.addEventListener('click', () => zoomAt(container.clientWidth / 2, container.clientHeight / 2, 1 / 1.2));
     ui.zoomFitBtn.addEventListener('click', () => fitToScreen('full'));
 }
 
-/**
- * เมื่อพื้นที่ Mind Map เปลี่ยนขนาด (หมุนจอ, ย่อ/ขยายหน้าต่าง, เปิด/ปิดแถบข้าง):
- *  - ถ้ายังอยู่ในโหมดพอดีจอ → ปรับพอดีใหม่
- *  - ถ้าผู้ใช้ลาก/ซูมเองแล้ว → คงจุดกึ่งกลางเดิมไว้ (ไม่ให้ภาพไหลหนีออกนอกจอ)
- */
 function setupResizeHandling() {
     let lastW = 0, lastH = 0;
     new ResizeObserver(([entry]) => {
         const { width: w, height: h } = entry.contentRect;
-        if (!w || !h) return;                               // ซ่อนอยู่ (กำลังดู Tree view)
+        if (!w || !h) return;
         if (state.treeData && state.activeView === 'mindmap') {
             if (state.autoFit && state.bounds) fitToScreen(state.autoFit);
             else if (lastW && lastH) {
@@ -430,8 +438,7 @@ function setupResizeHandling() {
 }
 
 /* ==========================================================================
-   โหนดที่เลือก + แถบเครื่องมือ (อุปกรณ์สัมผัส)
-   ปุ่ม SVG ในโหนดเล็กเกินแตะเมื่อซูมออก จึงใช้แถบปุ่มใหญ่ที่ขอบล่างแทน (CSS ซ่อนบนเมาส์)
+   Node Action Bar
    ========================================================================== */
 
 function findByPath(node, path) {
@@ -457,19 +464,17 @@ function updateActionBar() {
     if (!node) { hide(bar); bar.replaceChildren(); return; }
 
     const parent = findParent(state.treeData, node);
-    const makeBtn = (label, cls, onClick, aria) => {
+    const makeBtn = (label, cls, onClick) => {
         const b = document.createElement('button');
         b.type = 'button';
         b.className = cls;
         b.textContent = label;
-        if (aria) b.setAttribute('aria-label', aria);
         b.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
         return b;
     };
     const name = document.createElement('span');
     name.className = 'node-action-bar__name';
     name.textContent = node.name;
-    name.title = node.path;
 
     const items = [name];
     if (node.type === 'directory') {
@@ -478,52 +483,54 @@ function updateActionBar() {
             makeBtn('📁 โฟลเดอร์', 'border-amber-500/40 bg-amber-500/10 text-amber-300', () => openCreateModal(node, 'folder'))
         );
     }
-    if (parent) items.push(makeBtn('🗑 ลบ', 'border-rose-500/40 bg-rose-500/10 text-rose-300', () => openDeleteModal(node, parent)));
-    items.push(makeBtn('✕', 'border-slate-700 bg-slate-900 text-slate-400', () => { state.activePath = null; renderActiveView(); }, 'ปิดแถบเครื่องมือ'));
+    if (parent) {
+        items.push(
+            makeBtn('✏️', 'border-sky-500/40 bg-sky-500/10 text-sky-300', () => openRenameModal(node, parent)),
+            makeBtn('🗑', 'border-rose-500/40 bg-rose-500/10 text-rose-300', () => openDeleteModal(node, parent))
+        );
+    }
+    items.push(makeBtn('✕', 'border-slate-700 bg-slate-900 text-slate-400', () => { state.activePath = null; renderActiveView(); }));
     bar.replaceChildren(...items);
     show(bar);
 }
 
 /* ==========================================================================
-   แถบสถิติด้านข้าง: แถบประจำ (>=1024px) / Drawer เลื่อนเข้า (<1024px)
+   Sidebar Drawer Handling
    ========================================================================== */
 
 const desktopQuery = window.matchMedia('(min-width: 1024px)');
 const isDrawerOpen = () => !desktopQuery.matches && document.body.classList.contains('sidebar-open');
 
 function setSidebar(open) {
-    if (desktopQuery.matches) document.body.classList.toggle('sidebar-collapsed', !open);
-    else document.body.classList.toggle('sidebar-open', open);
+    if (desktopQuery.matches) {
+        document.body.classList.toggle('sidebar-collapsed', !open);
+        localStorage.setItem('foldermind_sidebar', open ? 'open' : 'collapsed'); // จำการตั้งค่า Sidebar (ข้อ 7)
+    } else {
+        document.body.classList.toggle('sidebar-open', open);
+    }
     syncSidebarA11y();
 }
 
-/** Drawer ที่ปิดอยู่ถูกซ่อนด้วย transform → ต้องกันไม่ให้ Tab/โปรแกรมอ่านจอเข้าถึงด้วย */
 function syncSidebarA11y() {
     ui.statsSidebar.inert = !desktopQuery.matches && !document.body.classList.contains('sidebar-open');
 }
 
 /* ==========================================================================
-   โหลดโฟลเดอร์ (Live Sync / ลากวาง / เลือกไฟล์ / ตัวอย่าง)
+   Disk Loading & Auto Refresh on Focus (ข้อ 3)
    ========================================================================== */
 
-/** state.busy กันกดซ้ำระหว่างที่งานเดิมยังทำไม่เสร็จ */
 async function loadSource({ message, mode, handle = null, read }) {
     if (state.busy) return;
     state.busy = true;
     showToast(message, 'info');
     try {
         const tree = await read();
-        if (!tree) { showToast('ไม่พบโฟลเดอร์ให้อ่าน (ลองลากโฟลเดอร์มาวาง)', 'error'); return; }
-        // เปลี่ยนโหมดหลังอ่านสำเร็จเท่านั้น (เดิมเปลี่ยนก่อน ถ้าอ่านพลาดสถานะจะเพี้ยน)
+        if (!tree) { showToast('ไม่พบโฟลเดอร์ให้อ่าน', 'error'); return; }
         state.isLiveSync = mode === 'live';
         state.rootHandle = handle;
         const collapsed = setTree(tree, { fresh: true });
         setMode(mode);
-        showToast(
-            `โหลด "${tree.name}" แล้ว: ${state.stats.totalFiles.toLocaleString()} ไฟล์, ${state.stats.totalFolders.toLocaleString()} โฟลเดอร์`
-            + (collapsed ? ' • ยุบโฟลเดอร์ชั้นลึกไว้เพราะมีรายการมาก' : ''),
-            'success'
-        );
+        showToast(`โหลด "${tree.name}" สำเร็จ`, 'success');
     } catch (err) {
         console.error(err);
         showToast(`เกิดข้อผิดพลาด: ${err.message}`, 'error');
@@ -532,32 +539,25 @@ async function loadSource({ message, mode, handle = null, read }) {
     }
 }
 
-async function handleOpenLiveSync() {
-    if (!isLiveSyncSupported()) {
-        showToast('เบราว์เซอร์นี้ไม่รองรับ File System Sync โปรดใช้ Chrome, Edge หรือ Brave', 'error');
-        return;
-    }
-    let handle;
-    try {
-        handle = await pickLiveDirectory();
-    } catch (err) {
-        if (err.name !== 'AbortError') showToast(`เปิดโฟลเดอร์ไม่สำเร็จ: ${err.message}`, 'error');
-        return;
-    }
-    await loadSource({
-        message: `กำลังอ่านโฟลเดอร์ "${handle.name}"...`, mode: 'live', handle,
-        read: () => readDirectoryHandle(handle)
-    });
-}
-
 async function refreshFromDisk() {
-    const collapsed = captureCollapsed(state.treeData);
-    const tree = await readDirectoryHandle(state.rootHandle);
-    restoreCollapsed(tree, collapsed); // เดิมการรีเฟรชทำให้โฟลเดอร์ที่ยุบไว้ถูกขยายหมด
-    setTree(tree, { fresh: false });
+    if (!state.isLiveSync || !state.rootHandle) return;
+    try {
+        const collapsed = captureCollapsed(state.treeData);
+        const tree = await readDirectoryHandle(state.rootHandle);
+        restoreCollapsed(tree, collapsed);
+        setTree(tree, { fresh: false });
+    } catch (err) {
+        console.warn('รีเฟรชดิสก์อัตโนมัติไม่สำเร็จ:', err);
+    }
 }
 
-/** หลังสร้าง/ลบสำเร็จ: อัปเดตหน้าจอ แล้วแจ้งผล */
+// รีเฟรชดิสก์เมื่อกลับมาที่หน้าต่างแอป (ข้อ 3)
+window.addEventListener('focus', () => {
+    if (state.isLiveSync && state.rootHandle) {
+        refreshFromDisk();
+    }
+});
+
 async function applyChange(successMessage) {
     try {
         if (state.isLiveSync && state.rootHandle) await refreshFromDisk();
@@ -565,28 +565,18 @@ async function applyChange(successMessage) {
         showToast(successMessage, 'success');
     } catch (err) {
         console.error(err);
-        showToast(`ทำรายการแล้ว แต่โหลดโฟลเดอร์ใหม่ไม่สำเร็จ: ${err.message}`, 'error');
+        showToast(`เกิดข้อผิดพลาด: ${err.message}`, 'error');
     }
 }
 
-const hasFiles = (e) => Array.from(e.dataTransfer?.types ?? []).includes('Files');
-
 function setupDragAndDrop() {
-    window.addEventListener('dragover', (e) => {
-        if (!hasFiles(e)) return; // ไม่แสดง overlay ตอนลากข้อความธรรมดา
-        e.preventDefault();
-        show(ui.dragHoverOverlay);
-    });
-    window.addEventListener('dragleave', (e) => {
-        if (!e.relatedTarget) hide(ui.dragHoverOverlay); // ออกนอกหน้าต่าง
-    });
+    window.addEventListener('dragover', (e) => { e.preventDefault(); show(ui.dragHoverOverlay); });
+    window.addEventListener('dragleave', (e) => { if (!e.relatedTarget) hide(ui.dragHoverOverlay); });
     window.addEventListener('drop', (e) => {
-        if (!hasFiles(e)) return;
         e.preventDefault();
         hide(ui.dragHoverOverlay);
-        // read() ต้องถูกเรียกแบบ synchronous ในนี้ (readDroppedItems ดึง entry ก่อน await)
         loadSource({
-            message: 'กำลังอ่านโครงสร้างโฟลเดอร์ (ดูอย่างเดียว)...', mode: 'readonly',
+            message: 'กำลังอ่านโครงสร้างโฟลเดอร์...', mode: 'readonly',
             read: () => readDroppedItems(e.dataTransfer.items)
         });
     });
@@ -594,34 +584,31 @@ function setupDragAndDrop() {
 
 function handleFolderInput(e) {
     const files = Array.from(e.target.files ?? []);
-    e.target.value = ''; // ให้เลือกโฟลเดอร์เดิมซ้ำได้ (เดิม change จะไม่ยิงอีก)
+    e.target.value = '';
     if (files.length === 0) return;
     loadSource({
-        message: 'กำลังอ่านโฟลเดอร์ที่เลือก (ดูอย่างเดียว)...', mode: 'readonly',
+        message: 'กำลังอ่านโฟลเดอร์ที่เลือก...', mode: 'readonly',
         read: async () => readFileList(files)
     });
 }
 
 /* ==========================================================================
-   Modal: สร้าง / ลบ / ASCII
+   Modals: Create, Rename, Delete (ข้อ 2, ข้อ 4)
    ========================================================================== */
 
-const MODALS = () => [ui.createModal, ui.deleteModal, ui.asciiModal];
+const MODALS = () => [ui.createModal, ui.renameModal, ui.deleteModal, ui.asciiModal];
 const closeAllModals = () => MODALS().forEach(hide);
-
-const TYPE_BTN = 'flex items-center justify-center gap-2 py-2 px-3 rounded-xl border font-medium transition-all';
-const TYPE_FILE_ON = `${TYPE_BTN} border-indigo-500 bg-indigo-600/20 text-indigo-200 shadow-sm`;
-const TYPE_FOLDER_ON = `${TYPE_BTN} border-amber-500 bg-amber-500/20 text-amber-200 shadow-sm`;
-const TYPE_OFF = `${TYPE_BTN} border-slate-800 bg-slate-900 text-slate-400`;
 
 function setCreateType(type) {
     state.createContext.type = type;
     const isFile = type === 'file';
-    ui.createTypeFileBtn.className = isFile ? TYPE_FILE_ON : TYPE_OFF;
-    ui.createTypeFolderBtn.className = isFile ? TYPE_OFF : TYPE_FOLDER_ON;
-    ui.createModalNameLabel.textContent = isFile
-        ? 'ชื่อไฟล์ (ระบุนามสกุล เช่น script.js, index.html, notes.txt):'
-        : 'ชื่อโฟลเดอร์ใหม่ (เช่น components, utils, assets):';
+    ui.createTypeFileBtn.className = isFile 
+        ? 'flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-indigo-500 bg-indigo-600/20 text-indigo-200 font-medium transition-all'
+        : 'flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 font-medium transition-all';
+    ui.createTypeFolderBtn.className = isFile 
+        ? 'flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 font-medium transition-all'
+        : 'flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-amber-500 bg-amber-600/20 text-amber-200 font-medium transition-all';
+    ui.createModalNameLabel.textContent = isFile ? 'ชื่อไฟล์ใหม่ (เช่น script.js):' : 'ชื่อโฟลเดอร์ใหม่:';
     ui.createModalInputName.placeholder = isFile ? 'script.js' : 'components';
 }
 
@@ -638,9 +625,8 @@ async function submitCreate() {
     if (state.busy) return;
     const name = ui.createModalInputName.value.trim();
     const { targetNode, type } = state.createContext;
-
     const invalid = validateEntryName(name);
-    if (invalid) { showToast(invalid, 'error'); return; } // เปิด modal ค้างไว้ให้แก้ชื่อ
+    if (invalid) { showToast(invalid, 'error'); return; }
 
     state.busy = true;
     try {
@@ -652,10 +638,35 @@ async function submitCreate() {
     }
     hide(ui.createModal);
     targetNode.collapsed = false;
-    const label = type === 'file' ? 'ไฟล์' : 'โฟลเดอร์';
-    await applyChange(state.isLiveSync
-        ? `สร้าง${label} "${name}" ลงในเครื่องจริงแล้ว`
-        : `สร้าง${label} "${name}" แล้ว (ในระบบจำลอง)`);
+    await applyChange(`สร้าง "${name}" สำเร็จ`);
+    state.busy = false;
+}
+
+function openRenameModal(targetNode, parentNode) {
+    state.renameContext = { targetNode, parentNode };
+    ui.renameModalInput.value = targetNode.name;
+    show(ui.renameModal);
+    ui.renameModalInput.focus();
+    ui.renameModalInput.select();
+}
+
+async function submitRename() {
+    if (state.busy) return;
+    const newName = ui.renameModalInput.value.trim();
+    const { targetNode, parentNode } = state.renameContext;
+    const invalid = validateEntryName(newName);
+    if (invalid) { showToast(invalid, 'error'); return; }
+
+    state.busy = true;
+    try {
+        await renameEntry(parentNode, targetNode, newName, { live: state.isLiveSync });
+    } catch (err) {
+        showToast(`เปลี่ยนชื่อไม่สำเร็จ: ${err.message}`, 'error');
+        state.busy = false;
+        return;
+    }
+    hide(ui.renameModal);
+    await applyChange(`เปลี่ยนชื่อเป็น "${newName}" สำเร็จ`);
     state.busy = false;
 }
 
@@ -663,6 +674,19 @@ function openDeleteModal(targetNode, parentNode) {
     state.deleteContext = { targetNode, parentNode };
     ui.deleteModalTargetName.textContent = targetNode.name;
     ui.deleteModalWarnSync.classList.toggle('hidden', !state.isLiveSync);
+
+    // หากเป็นโฟลเดอร์ที่มีไฟล์ข้างใน หรืออยู่ในโหมด Live Sync ให้บังคับพิมพ์ชื่อยืนยัน (ข้อ 2)
+    const hasChildren = targetNode.type === 'directory' && (targetNode.children?.length ?? 0) > 0;
+    if (hasChildren || state.isLiveSync) {
+        show(ui.deleteConfirmInputContainer);
+        ui.deleteConfirmInput.value = '';
+        ui.confirmDeleteBtn.disabled = true;
+        ui.confirmDeleteBtn.className = 'px-4 py-2 rounded-xl bg-rose-600/50 cursor-not-allowed text-white text-xs font-semibold shadow-lg transition-all';
+    } else {
+        hide(ui.deleteConfirmInputContainer);
+        ui.confirmDeleteBtn.disabled = false;
+        ui.confirmDeleteBtn.className = 'px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-lg transition-all';
+    }
     show(ui.deleteModal);
 }
 
@@ -681,14 +705,63 @@ async function confirmDelete() {
     hide(ui.deleteModal);
     state.deleteContext = { targetNode: null, parentNode: null };
     state.activePath = null;
-    await applyChange(state.isLiveSync
-        ? `ลบ "${targetNode.name}" ออกจากดิสก์เครื่องจริงแล้ว`
-        : `ลบ "${targetNode.name}" แล้ว (ในระบบจำลอง)`);
+    await applyChange(`ลบ "${targetNode.name}" สำเร็จ`);
     state.busy = false;
 }
 
 /* ==========================================================================
-   Export
+   Keyboard Navigation (ข้อ 9)
+   ========================================================================== */
+
+function setupKeyboardNavigation() {
+    document.addEventListener('keydown', (e) => {
+        // หากกำลังพิมพ์ใน input / modal ให้ข้ามชอร์ตคัททั่วไป
+        if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+
+        const modalOpen = MODALS().some((m) => !m.classList.contains('hidden'));
+        if (e.key === 'Escape') {
+            closeAllModals(); hide(ui.exportDropdown);
+            if (!modalOpen && isDrawerOpen()) setSidebar(false);
+            return;
+        }
+
+        if (modalOpen || !state.treeData) return;
+
+        // คีย์บอร์ดลูกศรนำทางโหนดใน Mind Map / Tree (ข้อ 9)
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+            e.preventDefault();
+            // รวบรวมโหนดทั้งหมดแบบเรียงลำดับ
+            const list = [];
+            (function flatten(node) {
+                list.push(node);
+                if (node.type === 'directory' && !node.collapsed && node.children) {
+                    node.children.forEach(flatten);
+                }
+            })(state.treeData);
+
+            if (list.length === 0) return;
+            let idx = list.findIndex(n => n.path === state.activePath);
+            if (idx === -1) idx = 0;
+            else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') idx = (idx + 1) % list.length;
+            else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') idx = (idx - 1 + list.length) % list.length;
+
+            state.activePath = list[idx].path;
+            renderActiveView();
+        }
+
+        // กด Delete เพื่อลบโหนดที่เลือก (ข้อ 9)
+        if (e.key === 'Delete' && state.activePath) {
+            const node = resolveActive();
+            const parent = findParent(state.treeData, node);
+            if (node && parent) {
+                openDeleteModal(node, parent);
+            }
+        }
+    });
+}
+
+/* ==========================================================================
+   Export Functions
    ========================================================================== */
 
 function updateExportState() {
@@ -703,11 +776,8 @@ const safeName = (s) => s.replace(/[\\/:*?"<>|]+/g, '_');
 function downloadBlob(blob, filename) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.append(a);
-    a.click();
-    a.remove();
+    a.href = url; a.download = filename;
+    document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
@@ -715,83 +785,66 @@ async function copyText(text) {
     try {
         await navigator.clipboard.writeText(text);
         return true;
-    } catch { // เช่น ไม่ใช่ secure context หรือไม่ได้รับอนุญาต → ลองวิธีสำรอง
+    } catch {
         const ta = document.createElement('textarea');
-        ta.value = text;
-        ta.style.cssText = 'position:fixed;opacity:0';
-        document.body.append(ta);
-        ta.select();
+        ta.value = text; ta.style.cssText = 'position:fixed;opacity:0';
+        document.body.append(ta); ta.select();
         let ok = false;
-        try { ok = document.execCommand('copy'); } catch { /* ignore */ }
+        try { ok = document.execCommand('copy'); } catch { }
         ta.remove();
         return ok;
     }
 }
 
-/**
- * สร้าง SVG สำหรับส่งออกจากต้นไม้ทั้งหมด (ไม่ขึ้นกับตำแหน่งแพน/ซูมหรือมุมมองที่เปิดอยู่)
- * เดิม: ส่งออกตามหน้าจอที่เห็น จึงอาจตัดขอบ/ว่างเปล่า และไฟล์ SVG ไม่มี xmlns เปิดนอกเบราว์เซอร์ไม่ได้
- */
 function buildExportSvg() {
     const bounds = renderMindmap(mindmapArgs());
     if (!bounds) return null;
-
     const pad = 40;
     const x = bounds.x - pad, y = bounds.y - pad;
     const w = Math.ceil(bounds.width + pad * 2), h = Math.ceil(bounds.height + pad * 2);
 
     const clone = ui.mindmapSvg.cloneNode(true);
-    clone.removeAttribute('class');
-    clone.removeAttribute('id');
+    clone.removeAttribute('class'); clone.removeAttribute('id');
     clone.querySelectorAll('.node-actions, .node-toggle').forEach((el) => el.remove());
     const group = clone.querySelector('#viewportGroup');
-    group.removeAttribute('transform');
-    group.removeAttribute('id');
+    group.removeAttribute('transform'); group.removeAttribute('id');
 
-    const bg = document.createElementNS(SVG_NS, 'rect');
-    for (const [k, v] of Object.entries({ x, y, width: w, height: h, fill: '#090d16' })) bg.setAttribute(k, v);
+    const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    for (const [k, v] of Object.entries({ x, y, width: w, height: h, fill: document.documentElement.classList.contains('dark') ? '#090d16' : '#f8fafc' })) {
+        bg.setAttribute(k, v);
+    }
     clone.insertBefore(bg, group);
-
-    clone.setAttribute('xmlns', SVG_NS);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
     clone.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
-    clone.setAttribute('width', w);
-    clone.setAttribute('height', h);
-    clone.setAttribute('font-family', "system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans Thai', sans-serif");
-
+    clone.setAttribute('width', w); clone.setAttribute('height', h);
     return { markup: new XMLSerializer().serializeToString(clone), width: w, height: h };
 }
 
 function exportAsSVG() {
     const svg = buildExportSvg();
-    if (!svg) { showToast('ไม่มีข้อมูลให้ส่งออก (ลองล้างคำค้นหา)', 'error'); return; }
+    if (!svg) { showToast('ไม่มีข้อมูลให้ส่งออก', 'error'); return; }
     downloadBlob(new Blob([svg.markup], { type: 'image/svg+xml;charset=utf-8' }), `${safeName(state.treeData.name)}-mindmap.svg`);
-    showToast('ดาวน์โหลดไฟล์ SVG แล้ว', 'success');
+    showToast('ดาวน์โหลด SVG สำเร็จ', 'success');
 }
 
 function exportAsPNG() {
     const svg = buildExportSvg();
-    if (!svg) { showToast('ไม่มีข้อมูลให้ส่งออก (ลองล้างคำค้นหา)', 'error'); return; }
-    showToast('กำลังสร้างไฟล์ PNG...', 'info');
-
-    // ขนาด canvas ต้องไม่เกินขีดจำกัดของเบราว์เซอร์
-    const scale = Math.min(2, 8192 / svg.width, 8192 / svg.height, Math.sqrt(64e6 / (svg.width * svg.height)));
+    if (!svg) { showToast('ไม่มีข้อมูลให้ส่งออก', 'error'); return; }
+    showToast('กำลังสร้างภาพ PNG...', 'info');
+    const scale = Math.min(2, 8192 / svg.width, 8192 / svg.height);
     const url = URL.createObjectURL(new Blob([svg.markup], { type: 'image/svg+xml;charset=utf-8' }));
     const img = new Image();
     img.onload = () => {
         const canvas = document.createElement('canvas');
-        canvas.width = Math.max(1, Math.floor(svg.width * scale));
-        canvas.height = Math.max(1, Math.floor(svg.height * scale));
+        canvas.width = Math.floor(svg.width * scale);
+        canvas.height = Math.floor(svg.height * scale);
         canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
         canvas.toBlob((blob) => {
             URL.revokeObjectURL(url);
-            if (!blob) { showToast('สร้างไฟล์ PNG ไม่สำเร็จ (ภาพใหญ่เกินไป)', 'error'); return; }
+            if (!blob) { showToast('สร้าง PNG ไม่สำเร็จ', 'error'); return; }
             downloadBlob(blob, `${safeName(state.treeData.name)}-mindmap.png`);
-            showToast('ดาวน์โหลดไฟล์ PNG แล้ว', 'success');
+            showToast('ดาวน์โหลด PNG สำเร็จ', 'success');
         }, 'image/png');
-    };
-    img.onerror = () => {
-        URL.revokeObjectURL(url);
-        showToast('สร้างไฟล์ PNG ไม่สำเร็จ', 'error');
     };
     img.src = url;
 }
@@ -804,7 +857,7 @@ function openAsciiModal() {
 
 async function copyAscii() {
     const ok = await copyText(ui.asciiText.textContent);
-    showToast(ok ? 'คัดลอกโครงสร้าง ASCII แล้ว' : 'คัดลอกไม่สำเร็จ ลองเลือกข้อความแล้วกด Ctrl+C', ok ? 'success' : 'error');
+    showToast(ok ? 'คัดลอกโครงสร้าง ASCII สำเร็จ' : 'คัดลอกไม่สำเร็จ', ok ? 'success' : 'error');
     if (ok) hide(ui.asciiModal);
 }
 
@@ -812,15 +865,16 @@ function exportAsJSON() {
     if (!state.treeData) return;
     const json = JSON.stringify(state.treeData, (key, val) => (key === 'handle' ? undefined : val), 2);
     downloadBlob(new Blob([json], { type: 'application/json' }), `${safeName(state.treeData.name)}-structure.json`);
-    showToast('ดาวน์โหลดไฟล์ JSON แล้ว', 'success');
+    showToast('ดาวน์โหลด JSON สำเร็จ', 'success');
 }
 
 /* ==========================================================================
-   ผูก Event & เริ่มต้น
+   Event Binding & Initialization
    ========================================================================== */
 
 function bindEvents() {
-    // เปิดโฟลเดอร์
+    ui.themeToggleBtn.addEventListener('click', toggleTheme);
+
     ui.openLiveSyncBtn.addEventListener('click', handleOpenLiveSync);
     ui.heroLiveSyncBtn.addEventListener('click', handleOpenLiveSync);
     ui.selectFolderBtn.addEventListener('click', () => ui.folderInput.click());
@@ -831,11 +885,10 @@ function bindEvents() {
     }));
     setupDragAndDrop();
 
-    // มุมมอง
     ui.viewMindmapBtn.addEventListener('click', () => switchView('mindmap'));
     ui.viewTreeBtn.addEventListener('click', () => switchView('tree'));
 
-    // ค้นหา (หน่วงเล็กน้อยเพื่อไม่ให้วาดใหม่ทุกตัวอักษรในโฟลเดอร์ใหญ่)
+    // ค้นหา
     let searchTimer = 0;
     ui.searchInput.addEventListener('input', (e) => {
         ui.clearSearchBtn.classList.toggle('hidden', !e.target.value.trim());
@@ -847,16 +900,30 @@ function bindEvents() {
     });
     ui.clearSearchBtn.addEventListener('click', () => {
         clearTimeout(searchTimer);
-        ui.searchInput.value = '';
-        state.searchQuery = '';
-        hide(ui.clearSearchBtn);
+        ui.searchInput.value = ''; state.searchQuery = '';
+        hide(ui.clearSearchBtn); renderActiveView();
+    });
+
+    // กรองประเภทไฟล์จาก Legend ด้านข้าง (ข้อ 5)
+    ui.legendContainer.addEventListener('click', (e) => {
+        const item = e.target.closest('.legend-filter-item');
+        if (!item) return;
+        const cat = item.getAttribute('data-category');
+        if (state.filterCategory === cat) {
+            state.filterCategory = null; // กดซ้ำเพื่อยกเลิกตัวกรอง
+            item.classList.remove('ring-2', 'ring-white');
+        } else {
+            state.filterCategory = cat;
+            ui.legendContainer.querySelectorAll('.legend-filter-item').forEach(el => el.classList.remove('ring-2', 'ring-white'));
+            item.classList.add('ring-2', 'ring-white');
+        }
         renderActiveView();
     });
 
     ui.expandAllBtn.addEventListener('click', () => setAllCollapsed(false));
     ui.collapseAllBtn.addEventListener('click', () => setAllCollapsed(true));
 
-    // เมนู Export
+    // Export menu
     ui.exportMenuBtn.addEventListener('click', (e) => { e.stopPropagation(); ui.exportDropdown.classList.toggle('hidden'); });
     document.addEventListener('click', () => hide(ui.exportDropdown));
     ui.exportPngBtn.addEventListener('click', exportAsPNG);
@@ -866,42 +933,46 @@ function bindEvents() {
     ui.copyAsciiBtn.addEventListener('click', copyAscii);
     ui.closeAsciiModal.addEventListener('click', () => hide(ui.asciiModal));
 
-    // Modal สร้าง / ลบ
+    // Modals
     ui.createTypeFileBtn.addEventListener('click', () => setCreateType('file'));
     ui.createTypeFolderBtn.addEventListener('click', () => setCreateType('folder'));
     ui.submitCreateBtn.addEventListener('click', submitCreate);
     ui.cancelCreateBtn.addEventListener('click', () => hide(ui.createModal));
     ui.closeCreateModal.addEventListener('click', () => hide(ui.createModal));
+
+    ui.submitRenameBtn.addEventListener('click', submitRename);
+    ui.cancelRenameBtn.addEventListener('click', () => hide(ui.renameModal));
+    ui.closeRenameModal.addEventListener('click', () => hide(ui.renameModal));
+
+    // ตรวจสอบการพิมพ์ชื่อยืนยันก่อนลบ (ข้อ 2)
+    ui.deleteConfirmInput.addEventListener('input', (e) => {
+        const targetName = state.deleteContext.targetNode?.name || '';
+        const match = e.target.value.trim() === targetName;
+        ui.confirmDeleteBtn.disabled = !match;
+        ui.confirmDeleteBtn.className = match
+            ? 'px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-lg transition-all'
+            : 'px-4 py-2 rounded-xl bg-rose-600/50 cursor-not-allowed text-white text-xs font-semibold shadow-lg transition-all';
+    });
     ui.confirmDeleteBtn.addEventListener('click', confirmDelete);
     ui.cancelDeleteBtn.addEventListener('click', () => hide(ui.deleteModal));
 
-    // คลิกพื้นหลังเพื่อปิด / Esc ปิด / Enter ยืนยันการสร้าง
     for (const modal of MODALS()) {
         modal.addEventListener('click', (e) => { if (e.target === modal) hide(modal); });
     }
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            const modalOpen = MODALS().some((m) => !m.classList.contains('hidden'));
-            closeAllModals(); hide(ui.exportDropdown);
-            if (!modalOpen && isDrawerOpen()) setSidebar(false);
-        }
-        if (e.key === 'Enter' && e.target === ui.createModalInputName) { e.preventDefault(); submitCreate(); }
-    });
 
-    // แถบด้านข้าง
     ui.toggleSidebarBtn.addEventListener('click', () => setSidebar(false));
     ui.expandSidebarBtn.addEventListener('click', () => setSidebar(true));
     ui.sidebarBackdrop.addEventListener('click', () => setSidebar(false));
     desktopQuery.addEventListener('change', () => { document.body.classList.remove('sidebar-open'); syncSidebarA11y(); });
 
-    // ดักข้อผิดพลาดที่หลุดมา แทนที่จะเงียบหาย
-    window.addEventListener('unhandledrejection', (e) => {
-        console.error(e.reason);
-        showToast(`เกิดข้อผิดพลาด: ${e.reason?.message ?? e.reason}`, 'error');
-    });
+    setupKeyboardNavigation();
 }
 
 function init() {
+    initTheme();
+    if (localStorage.getItem('foldermind_sidebar') === 'collapsed' && desktopQuery.matches) {
+        document.body.classList.add('sidebar-collapsed');
+    }
     if (!isLiveSyncSupported()) show(ui.fsApiNotSupportedNotice);
     bindEvents();
     setupPanZoom();

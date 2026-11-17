@@ -1,37 +1,21 @@
 /**
- * fs-access.js
- * อ่าน/เขียนโครงสร้างโฟลเดอร์จากหลายแหล่ง:
- *   1) File System Access API  (อ่าน+เขียนไฟล์เครื่องจริง)
- *   2) Drag & Drop (webkitGetAsEntry)  (อ่านอย่างเดียว)
- *   3) <input webkitdirectory>  (อ่านอย่างเดียว)
- * โมดูลนี้ไม่แตะ DOM เลย จึงทดสอบแยกได้ง่าย
- *
- * โครงสร้าง node:
- *   { name, type: 'file'|'directory', path, size?, extension?, category,
- *     children?, collapsed, handle?, skipped? }
+ * fs-access.js (Pro v3.1)
+ * รองรับการอ่าน/เขียน, คำนวณขนาดโฟลเดอร์, เปลี่ยนชื่อ (Rename) และย้ายไฟล์ (Move)
  */
 
-/* ---------- ประเภทไฟล์ ---------- */
-
 const EXTENSION_CATEGORIES = {
-    // Code & Scripts
     js: 'code', mjs: 'code', ts: 'code', jsx: 'code', tsx: 'code', py: 'code', html: 'code', css: 'code',
     scss: 'code', cpp: 'code', c: 'code', h: 'code', cs: 'code', java: 'code', rb: 'code',
     php: 'code', go: 'code', rs: 'code', vue: 'code', svelte: 'code', sh: 'code', sql: 'code',
-    // Images & Media
     png: 'media', jpg: 'media', jpeg: 'media', gif: 'media', svg: 'media', webp: 'media',
     ico: 'media', mp4: 'media', mp3: 'media', wav: 'media', mov: 'media', avi: 'media',
-    // Documents
     pdf: 'docs', md: 'docs', txt: 'docs', doc: 'docs', docx: 'docs', xls: 'docs', xlsx: 'docs',
     ppt: 'docs', pptx: 'docs', epub: 'docs',
-    // Data & Config
     json: 'data', xml: 'data', yaml: 'data', yml: 'data', csv: 'data', env: 'data',
     toml: 'data', lock: 'data', config: 'data',
-    // Archives
     zip: 'archives', tar: 'archives', gz: 'archives', '7z': 'archives', rar: 'archives', bz2: 'archives'
 };
 
-/** โฟลเดอร์ที่ไม่อ่านเนื้อหาข้างใน (ใหญ่มาก ทำให้เครื่องค้าง) แต่ยังแสดงเป็นโหนดอยู่ */
 export const IGNORED_DIRS = new Set(['node_modules', '.git']);
 
 export function getExtension(filename) {
@@ -41,14 +25,11 @@ export function getExtension(filename) {
 }
 
 export function getCategory(ext) {
-    // ใช้ hasOwn กันกรณีไฟล์ชื่อ "x.constructor" / "x.toString" ที่เคยทำให้ได้ค่า function แทนหมวด
     return ext && Object.hasOwn(EXTENSION_CATEGORIES, ext) ? EXTENSION_CATEGORIES[ext] : 'other';
 }
 
 export const isLiveSyncSupported = () =>
     typeof window !== 'undefined' && 'showDirectoryPicker' in window;
-
-/* ---------- ตัวสร้าง node ---------- */
 
 function makeFile(name, path, size = 0, handle) {
     const extension = getExtension(name);
@@ -58,7 +39,7 @@ function makeFile(name, path, size = 0, handle) {
 }
 
 function makeDir(name, path, children = [], handle) {
-    const node = { name, type: 'directory', path, children, category: 'folder', collapsed: false };
+    const node = { name, type: 'directory', path, children, category: 'folder', collapsed: false, size: 0 };
     if (handle) node.handle = handle;
     return node;
 }
@@ -66,9 +47,6 @@ function makeDir(name, path, children = [], handle) {
 const joinPath = (parent, name) => (parent ? `${parent}/${name}` : name);
 const shouldSkip = (name, parentPath) => Boolean(parentPath) && IGNORED_DIRS.has(name);
 
-/* ---------- 1) File System Access API (อ่าน+เขียน) ---------- */
-
-/** จำกัดจำนวน getFile() ที่ทำพร้อมกัน (ใช้กับงานปลายทางเท่านั้น เพื่อไม่ให้เกิด deadlock) */
 function createLimiter(max) {
     let active = 0;
     const queue = [];
@@ -85,7 +63,19 @@ export async function pickLiveDirectory() {
     return window.showDirectoryPicker({ mode: 'readwrite' });
 }
 
-/** อ่านทั้งต้นไม้จาก FileSystemDirectoryHandle */
+/** คำนวณขนาดรวมของโฟลเดอร์ และจัดเรียงรายการ (ข้อ 6) */
+export function calculateFolderSizes(node) {
+    if (node.type === 'file') return node.size || 0;
+    let totalSize = 0;
+    if (node.children) {
+        for (const child of node.children) {
+            totalSize += calculateFolderSizes(child);
+        }
+    }
+    node.size = totalSize;
+    return totalSize;
+}
+
 export async function readDirectoryHandle(rootHandle, { onProgress } = {}) {
     const limit = createLimiter(32);
     let count = 0;
@@ -97,7 +87,7 @@ export async function readDirectoryHandle(rootHandle, { onProgress } = {}) {
             let size = 0;
             try {
                 size = (await limit(() => handle.getFile())).size;
-            } catch { /* อ่านไม่ได้ (เช่น ไฟล์ถูกล็อก) → ถือว่าขนาด 0 */ }
+            } catch { /* ignore */ }
             onProgress?.(++count);
             return makeFile(handle.name, path, size, handle);
         }
@@ -118,12 +108,13 @@ export async function readDirectoryHandle(rootHandle, { onProgress } = {}) {
         return dir;
     }
 
-    return walk(rootHandle, '');
+    const rootNode = await walk(rootHandle, '');
+    calculateFolderSizes(rootNode); // คำนวณขนาดรวม
+    return rootNode;
 }
 
 const INVALID_NAME = /[\\/:*?"<>|\u0000-\u001f]/;
 
-/** ตรวจชื่อไฟล์/โฟลเดอร์ (เฉพาะรูปแบบ) → คืนข้อความ error หรือ null ถ้าผ่าน */
 export function validateEntryName(name) {
     if (!name) return 'โปรดระบุชื่อไฟล์หรือโฟลเดอร์';
     if (name === '.' || name === '..') return 'ชื่อ "." และ ".." ใช้ไม่ได้';
@@ -133,7 +124,6 @@ export function validateEntryName(name) {
     return null;
 }
 
-/** ในโหมด live ตรวจกับดิสก์จริง (ครอบคลุมทั้งไฟล์/โฟลเดอร์ และกรณีตัวพิมพ์เล็ก-ใหญ่บน Windows) */
 async function nameExistsOnDisk(dirHandle, name) {
     try { await dirHandle.getFileHandle(name); return true; } catch (e) {
         if (e.name === 'TypeMismatchError') return true;
@@ -146,22 +136,14 @@ async function nameExistsOnDisk(dirHandle, name) {
     return false;
 }
 
-/**
- * สร้างไฟล์/โฟลเดอร์ใหม่
- * - live: เขียนลงดิสก์จริง (ผู้เรียกต้องอ่านต้นไม้ใหม่เอง)
- * - ไม่ใช่ live: เพิ่มใน memory แล้วคืน node ที่สร้าง
- * โยน Error ถ้าชื่อซ้ำ
- */
 export async function createEntry(parentNode, name, type, { live }) {
     const exists = 'มีรายการชื่อนี้อยู่แล้วในโฟลเดอร์นี้';
-
     if (live && parentNode.handle) {
         if (await nameExistsOnDisk(parentNode.handle, name)) throw new Error(exists);
         if (type === 'file') await parentNode.handle.getFileHandle(name, { create: true });
         else await parentNode.handle.getDirectoryHandle(name, { create: true });
         return null;
     }
-
     const lower = name.toLowerCase();
     if (parentNode.children?.some((c) => c.name.toLowerCase() === lower)) throw new Error(exists);
     const path = joinPath(parentNode.path, name);
@@ -170,7 +152,56 @@ export async function createEntry(parentNode, name, type, { live }) {
     return node;
 }
 
-/** ลบไฟล์/โฟลเดอร์ (live = ลบจากดิสก์จริงแบบถาวร) */
+/** ฟังก์ชันเปลี่ยนชื่อ (Rename) รองรับดิสก์จริงและระบบจำลอง (ข้อ 4) */
+export async function renameEntry(parentNode, node, newName, { live }) {
+    const invalid = validateEntryName(newName);
+    if (invalid) throw new Error(invalid);
+    if (node.name === newName) return;
+
+    if (live && parentNode.handle) {
+        if (await nameExistsOnDisk(parentNode.handle, newName)) throw new Error('มีชื่อนี้อยู่แล้ว');
+        // File System Access API ไม่มีคำสั่ง rename โดยตรง ต้องใช้วิธีคัดลอกเนื้อหาเดิมไปสร้างใหม่แล้วลบของเก่า
+        if (node.type === 'file') {
+            const oldFileHandle = await parentNode.handle.getFileHandle(node.name);
+            const file = await oldFileHandle.getFile();
+            const newFileHandle = await parentNode.handle.getFileHandle(newName, { create: true });
+            const writable = await newFileHandle.createWritable();
+            await writable.write(file);
+            await writable.close();
+            await parentNode.handle.removeEntry(node.name);
+        } else {
+            // สำหรับโฟลเดอร์ในดิสก์จริง
+            const oldDirHandle = await parentNode.handle.getDirectoryHandle(node.name);
+            const newDirHandle = await parentNode.handle.getDirectoryHandle(newName, { create: true });
+            // คัดลอกแบบ recursive อย่างง่าย
+            async function copyDir(src, dest) {
+                for await (const [name, handle] of src.entries()) {
+                    if (handle.kind === 'file') {
+                        const f = await handle.getFile();
+                        const nf = await dest.getFileHandle(name, { create: true });
+                        const w = await nf.createWritable();
+                        await w.write(f);
+                        await w.close();
+                    } else if (handle.kind === 'directory') {
+                        const nd = await dest.getDirectoryHandle(name, { create: true });
+                        await copyDir(handle, nd);
+                    }
+                }
+            }
+            await copyDir(oldDirHandle, newDirHandle);
+            await parentNode.handle.removeEntry(node.name, { recursive: true });
+        }
+        return;
+    }
+
+    // โหมดจำลอง
+    if (parentNode.children?.some((c) => c.name.toLowerCase() === newName.toLowerCase())) {
+        throw new Error('มีชื่อนี้อยู่แล้ว');
+    }
+    node.name = newName;
+    node.path = joinPath(parentNode.path, newName);
+}
+
 export async function deleteEntry(parentNode, node, { live }) {
     if (live && parentNode.handle) {
         await parentNode.handle.removeEntry(node.name, { recursive: node.type === 'directory' });
@@ -178,8 +209,6 @@ export async function deleteEntry(parentNode, node, { live }) {
     }
     parentNode.children = (parentNode.children ?? []).filter((c) => c !== node);
 }
-
-/* ---------- เก็บ/คืนสถานะ collapsed ตอนอ่านดิสก์ใหม่ ---------- */
 
 export function captureCollapsed(root) {
     const paths = new Set();
@@ -199,13 +228,11 @@ export function restoreCollapsed(root, paths) {
     })(root);
 }
 
-/* ---------- 2) Drag & Drop (อ่านอย่างเดียว) ---------- */
-
 const entryToFile = (entry) => new Promise((resolve, reject) => entry.file(resolve, reject));
 
 async function readAllEntries(reader) {
     const all = [];
-    for (;;) { // readEntries คืนทีละก้อน ต้องเรียกซ้ำจนว่าง
+    for (;;) {
         const batch = await new Promise((resolve, reject) => reader.readEntries(resolve, reject));
         if (batch.length === 0) return all;
         all.push(...batch);
@@ -214,7 +241,6 @@ async function readAllEntries(reader) {
 
 async function walkEntry(entry, parentPath) {
     const path = joinPath(parentPath, entry.name);
-
     if (entry.isFile) {
         try {
             return makeFile(entry.name, path, (await entryToFile(entry)).size);
@@ -240,10 +266,6 @@ async function walkEntry(entry, parentPath) {
 
 export const DROP_ROOT_NAME = 'รายการที่วางลงมา';
 
-/**
- * ต้องเรียกแบบ synchronous ภายใน drop handler เพราะ dataTransfer.items
- * จะใช้ไม่ได้หลังจาก handler จบ (ส่วนบนของฟังก์ชันนี้ทำงานก่อน await ตัวแรก)
- */
 export async function readDroppedItems(items) {
     const entries = [...items]
         .filter((item) => item.kind === 'file')
@@ -251,18 +273,17 @@ export async function readDroppedItems(items) {
         .filter(Boolean);
 
     if (entries.length === 0) return null;
-    if (entries.length === 1 && entries[0].isDirectory) return walkEntry(entries[0], '');
-
+    if (entries.length === 1 && entries[0].isDirectory) {
+        const root = await walkEntry(entries[0], '');
+        calculateFolderSizes(root);
+        return root;
+    }
     const children = (await Promise.all(entries.map((e) => walkEntry(e, DROP_ROOT_NAME)))).filter(Boolean);
-    return makeDir(DROP_ROOT_NAME, DROP_ROOT_NAME, children);
+    const root = makeDir(DROP_ROOT_NAME, DROP_ROOT_NAME, children);
+    calculateFolderSizes(root);
+    return root;
 }
 
-/* ---------- 3) <input webkitdirectory> และข้อมูลตัวอย่าง ---------- */
-
-/**
- * สร้างต้นไม้จากรายการพาธ [{ path: 'root/a/b.txt', size }]
- * (แก้บั๊กเดิมที่โฟลเดอร์ราก "ซ้อน" ตัวเอง เช่น foo → foo → ...)
- */
 export function buildTreeFromPaths(files, fallbackRoot = 'Root') {
     const rootName = files[0]?.path.split('/')[0] || fallbackRoot;
     const root = makeDir(rootName, rootName);
@@ -286,10 +307,11 @@ export function buildTreeFromPaths(files, fallbackRoot = 'Root') {
                 dirs.set(childPath, dir);
                 parent.children.push(dir);
             }
-            ignored = Boolean(dir.skipped); // ข้ามไฟล์ที่อยู่ใน node_modules / .git
+            ignored = Boolean(dir.skipped);
             parent = dir;
         }
     }
+    calculateFolderSizes(root);
     return root;
 }
 

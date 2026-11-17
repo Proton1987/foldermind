@@ -1,8 +1,6 @@
 /**
- * render-tree.js
- * วาด Mind Map (SVG) และ Tree View (DOM) จากข้อมูลต้นไม้
- * ไม่เก็บ state ของแอป: รับข้อมูลและ callback เข้ามา แล้วคืนผลลัพธ์
- * ข้อความที่มาจากชื่อไฟล์ใช้ textContent เสมอ (ไม่ใช้ innerHTML) เพื่อกัน XSS
+ * render-tree.js (Pro v3.1)
+ * วาด Mind Map และ Tree View พร้อมแสดงขนาดโฟลเดอร์และรองรับการกรองหมวดหมู่
  */
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -27,8 +25,6 @@ export function formatBytes(bytes) {
     return `${parseFloat((bytes / 1024 ** i).toFixed(1))} ${units[i]}`;
 }
 
-/* ---------- ตัวช่วยสร้าง element ---------- */
-
 function svg(tag, attrs = {}, text) {
     const el = document.createElementNS(SVG_NS, tag);
     for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
@@ -43,41 +39,35 @@ function html(tag, className = '', text) {
     return el;
 }
 
-/* ---------- ตัวกรองค้นหา ---------- */
+/** ตัวกรองค้นหาและกรองตามประเภทหมวดหมู่ (ข้อ 5) */
+function createMatcher(query, filterCategory) {
+    return (node) => {
+        // กรองตามหมวดหมู่ถ้ามีการเลือกไว้
+        const matchCategory = !filterCategory || node.category === filterCategory || (filterCategory === 'folder' && node.type === 'directory');
+        if (!matchCategory && node.type === 'file') return false;
 
-/** คืนฟังก์ชันตรวจว่าโหนด (หรือลูกหลาน) ตรงกับคำค้นหรือไม่ — memoize ต่อการวาด 1 ครั้ง */
-function createMatcher(query) {
-    if (!query) return () => true;
-    const cache = new Map();
-    const test = (node) => {
-        if (cache.has(node)) return cache.get(node);
+        if (!query) return true;
         const hit = node.name.toLowerCase().includes(query)
             || (node.extension ?? '').includes(query)
-            || (node.children?.some(test) ?? false);
-        cache.set(node, hit);
+            || (node.children?.some(c => createMatcher(query, filterCategory)(c)) ?? false);
         return hit;
     };
-    return test;
 }
 
 const isNameMatch = (node, query) => Boolean(query) && node.name.toLowerCase().includes(query);
-
-/** ตอนค้นหาจะเปิดโฟลเดอร์ที่ยุบอยู่ให้เห็นผลลัพธ์ (เดิมผลลัพธ์ในโฟลเดอร์ที่ยุบจะหายไป) */
 const isOpen = (node, query) => node.type === 'directory' && (!node.collapsed || Boolean(query));
 
 /* ==========================================================================
    Mind Map (SVG)
    ========================================================================== */
 
-const NODE_W = 160;
-const NODE_H = 36;
-const H_GAP = 230;
-const V_GAP = 48;
+const NODE_W = 175;
+const NODE_H = 38;
+const H_GAP = 240;
+const V_GAP = 50;
 const MAX_LABEL = 13;
 
 function actionButton({ x, stroke, color, glyph, size, title, onClick }) {
-    // ชั้นนอกถือตำแหน่ง (translate) ชั้นในถือเอฟเฟกต์ hover (scale)
-    // ถ้ารวมกัน CSS transform จะทับ attribute ทำให้ปุ่มกระโดดหนีเมาส์ตอน hover
     const outer = svg('g', { transform: `translate(${x}, 0)` });
     const inner = svg('g', { class: 'node-action-btn' });
     inner.append(
@@ -90,20 +80,14 @@ function actionButton({ x, stroke, color, glyph, size, title, onClick }) {
     return outer;
 }
 
-/**
- * วาด Mind Map ลงใน linesLayer / nodesLayer
- * คืนค่า bounds { x, y, width, height } ของเนื้อหา (หน่วยเดียวกับพิกัดใน viewportGroup)
- * หรือ null ถ้าไม่มีอะไรให้วาด
- */
-export function renderMindmap({ root, query, activeNode, linesLayer, nodesLayer, onToggle, onCreate, onDelete, onFileClick }) {
+export function renderMindmap({ root, query, filterCategory, activeNode, linesLayer, nodesLayer, onToggle, onCreate, onDelete, onRename, onFileClick }) {
     linesLayer.replaceChildren();
     nodesLayer.replaceChildren();
     if (!root) return null;
 
-    const matches = createMatcher(query);
+    const matches = createMatcher(query, filterCategory);
     let leafY = 0;
 
-    // 1) จัดวาง: ใบอยู่เรียงกัน, พ่อแม่อยู่กึ่งกลางลูก
     function layout(node, depth, parent) {
         if (!matches(node)) return null;
         const kids = isOpen(node, query) && node.children
@@ -121,7 +105,6 @@ export function renderMindmap({ root, query, activeNode, linesLayer, nodesLayer,
     const flat = [];
     (function collect(n) { flat.push(n); n.kids.forEach(collect); })(top);
 
-    // 2) จัดให้กึ่งกลางแนวตั้งอยู่ที่ y = 0 และคำนวณขอบเขต
     let minY = Infinity, maxY = -Infinity, maxX = 0;
     for (const n of flat) {
         if (n.y < minY) minY = n.y;
@@ -131,7 +114,6 @@ export function renderMindmap({ root, query, activeNode, linesLayer, nodesLayer,
     const centerY = (minY + maxY) / 2;
     for (const n of flat) n.y -= centerY;
 
-    // 3) วาด
     for (const n of flat) {
         const { data } = n;
         const colors = colorsFor(data);
@@ -157,38 +139,39 @@ export function renderMindmap({ root, query, activeNode, linesLayer, nodesLayer,
         if (hit) rect.setAttribute('filter', 'url(#glow)');
 
         const label = data.name.length > MAX_LABEL ? `${data.name.slice(0, MAX_LABEL - 2)}..` : data.name;
+        // แสดงขนาดไฟล์หรือโฟลเดอร์ต่อท้าย (ข้อ 6)
+        const sizeStr = formatBytes(data.size);
+
         g.append(
-            svg('title', {}, data.skipped ? `${data.path} (ไม่อ่านเนื้อหาข้างใน)` : data.path),
+            svg('title', {}, `${data.path} (${sizeStr})`),
             rect,
-            svg('circle', { cx: 14, cy: 18, r: 4.5, fill: colors.stroke }),
-            svg('text', {
-                x: 25, y: 22, fill: '#e2e8f0', 'font-size': 11,
-                'font-weight': data.type === 'directory' ? 600 : 400
-            }, label)
+            svg('circle', { cx: 14, cy: 19, r: 4.5, fill: colors.stroke }),
+            svg('text', { x: 25, y: 17, fill: '#e2e8f0', 'font-size': 11, 'font-weight': data.type === 'directory' ? 600 : 400 }, label),
+            svg('text', { x: 25, y: 30, fill: '#94a3b8', 'font-size': 9, 'font-family': 'monospace' }, sizeStr)
         );
 
-        // ปุ่มจัดการ (CSS ทำให้โผล่ตอน hover)
-        const actions = svg('g', { class: 'node-actions', transform: 'translate(100, 8)' });
+        const actions = svg('g', { class: 'node-actions', transform: 'translate(92, 9)' });
         if (data.type === 'directory') {
             actions.append(
                 actionButton({ x: 0, stroke: '#06b6d4', color: '#22d3ee', glyph: '+', size: 10, title: 'สร้างไฟล์ใหม่', onClick: () => onCreate(data, 'file') }),
-                actionButton({ x: 18, stroke: '#f59e0b', color: '#fbbf24', glyph: '📁', size: 8, title: 'สร้างโฟลเดอร์ย่อย', onClick: () => onCreate(data, 'folder') })
+                actionButton({ x: 18, stroke: '#f59e0b', color: '#fbbf24', glyph: '📁', size: 8, title: 'สร้างโฟลเดอร์', onClick: () => onCreate(data, 'folder') })
             );
         }
+        actions.append(
+            actionButton({ x: data.type === 'directory' ? 36 : 0, stroke: '#38bdf8', color: '#38bdf8', glyph: '✏️', size: 8, title: 'เปลี่ยนชื่อ', onClick: () => onRename(data, n.parent) })
+        );
         if (n.parent) {
             actions.append(
-                actionButton({ x: 36, stroke: '#f43f5e', color: '#fb7185', glyph: '✕', size: 8, title: 'ลบรายการนี้', onClick: () => onDelete(data, n.parent) })
+                actionButton({ x: data.type === 'directory' ? 54 : 18, stroke: '#f43f5e', color: '#fb7185', glyph: '✕', size: 8, title: 'ลบ', onClick: () => onDelete(data, n.parent) })
             );
         }
         g.append(actions);
 
-        // ปุ่มยุบ/ขยาย
         if (data.type === 'directory' && data.children?.length > 0) {
-            const toggle = svg('g', { class: 'node-toggle', transform: 'translate(154, 11)' });
+            const toggle = svg('g', { class: 'node-toggle', transform: 'translate(156, 12)' });
             toggle.append(
                 svg('circle', { cx: 7, cy: 7, r: 7, fill: '#1e293b', stroke: colors.stroke, 'stroke-width': 1 }),
-                svg('text', { x: 7, y: 10.5, 'text-anchor': 'middle', fill: '#ffffff', 'font-size': 10, 'font-weight': 'bold' },
-                    data.collapsed ? '+' : '−')
+                svg('text', { x: 7, y: 10.5, 'text-anchor': 'middle', fill: '#ffffff', 'font-size': 10, 'font-weight': 'bold' }, data.collapsed ? '+' : '−')
             );
             toggle.addEventListener('click', (e) => { e.stopPropagation(); onToggle(data); });
             g.append(toggle);
@@ -220,9 +203,9 @@ const ICON_PATHS = {
 };
 const PLUS_PATH = 'M12 4v16m8-8H4';
 const NEW_FOLDER_PATH = 'M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z';
+const RENAME_PATH = 'M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z';
 const TRASH_PATH = 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16';
 
-/** ไอคอนทั้งหมดเป็นข้อความคงที่ในโค้ด (ไม่มีข้อมูลจากผู้ใช้) จึงใช้ innerHTML ได้อย่างปลอดภัย */
 function strokeIcon(pathD) {
     return `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${pathD}"></path></svg>`;
 }
@@ -245,12 +228,12 @@ function iconButton(className, title, pathD, onClick) {
     return btn;
 }
 
-export function renderTree({ root, query, container, pathLabel, onToggle, onCreate, onDelete, onFileClick }) {
+export function renderTree({ root, query, filterCategory, container, pathLabel, onToggle, onCreate, onDelete, onRename, onFileClick }) {
     container.replaceChildren();
     if (!root) return;
     pathLabel.textContent = `ตำแหน่ง: ${root.path}`;
 
-    const matches = createMatcher(query);
+    const matches = createMatcher(query, filterCategory);
 
     function build(node, depth, parent) {
         if (!matches(node)) return null;
@@ -261,10 +244,9 @@ export function renderTree({ root, query, container, pathLabel, onToggle, onCrea
 
         const row = html('div', `tree-row flex items-center justify-between py-1.5 px-2 rounded-lg cursor-pointer my-0.5 border ${
             isNameMatch(node, query) ? 'border-cyan-500 bg-cyan-950/30' : 'border-transparent hover:border-slate-800'}`);
-        row.style.setProperty('--depth', depth); // ระยะเยื้องกำหนดใน CSS (ย่อลงบนจอเล็ก)
+        row.style.setProperty('--depth', depth);
         row.title = node.path;
 
-        // ซ้าย: ลูกศร + ไอคอน + ชื่อ
         const left = html('div', 'flex items-center gap-2 overflow-hidden mr-2');
         if (isDir) {
             left.append(html('span', `text-slate-400 text-xs transition-transform duration-200 ${isOpen(node, query) ? 'rotate-90' : ''}`, '▶'));
@@ -277,20 +259,21 @@ export function renderTree({ root, query, container, pathLabel, onToggle, onCrea
         left.append(icon, html('span', `truncate ${isDir ? 'font-semibold text-slate-200' : 'text-slate-300'}`, node.name));
         row.append(left);
 
-        // ขวา: จำนวน/ขนาด + ปุ่มลัด
         const right = html('div', 'flex items-center gap-1 shrink-0 font-mono text-xs');
+        // แสดงขนาดโฟลเดอร์/ไฟล์ใน Tree View ด้วย (ข้อ 6)
+        right.append(html('span', 'text-slate-400 text-[11px] mr-2', formatBytes(node.size)));
+
         if (isDir) {
-            const label = node.skipped ? 'ไม่อ่านเนื้อหา' : `${node.children?.length ?? 0} รายการ`;
-            right.append(html('span', 'count-badge bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full text-[10px] mr-1', label));
             right.append(
-                iconButton('hover:bg-cyan-500/20 text-cyan-400', 'สร้างไฟล์ใหม่ในโฟลเดอร์นี้', PLUS_PATH, () => onCreate(node, 'file')),
-                iconButton('hover:bg-amber-500/20 text-amber-400', 'สร้างโฟลเดอร์ย่อย', NEW_FOLDER_PATH, () => onCreate(node, 'folder'))
+                iconButton('hover:bg-cyan-500/20 text-cyan-400', 'สร้างไฟล์', PLUS_PATH, () => onCreate(node, 'file')),
+                iconButton('hover:bg-amber-500/20 text-amber-400', 'สร้างโฟลเดอร์', NEW_FOLDER_PATH, () => onCreate(node, 'folder'))
             );
-        } else {
-            right.append(html('span', 'text-slate-500 text-[11px] mr-2', formatBytes(node.size)));
         }
         if (parent) {
-            right.append(iconButton('hover:bg-rose-500/20 text-rose-400', 'ลบรายการนี้', TRASH_PATH, () => onDelete(node, parent)));
+            right.append(
+                iconButton('hover:bg-sky-500/20 text-sky-400', 'เปลี่ยนชื่อ', RENAME_PATH, () => onRename(node, parent)),
+                iconButton('hover:bg-rose-500/20 text-rose-400', 'ลบ', TRASH_PATH, () => onDelete(node, parent))
+            );
         }
         row.append(right);
 
@@ -316,13 +299,9 @@ export function renderTree({ root, query, container, pathLabel, onToggle, onCrea
     if (dom) container.append(dom);
 }
 
-/* ==========================================================================
-   ASCII Tree
-   ========================================================================== */
-
 export function generateAsciiTree(node, prefix = '') {
     if (!node) return '';
-    let result = `${node.name}${node.type === 'directory' ? '/' : ''}\n`;
+    let result = `${node.name}${node.type === 'directory' ? '/' : ''} (${formatBytes(node.size)})\n`;
     const kids = node.type === 'directory' ? node.children ?? [] : [];
     kids.forEach((child, index) => {
         const last = index === kids.length - 1;

@@ -3,11 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
-    <meta name="color-scheme" content="dark">
+    <meta name="color-scheme" content="dark light">
     <meta name="description" content="FolderMind: แสดงโครงสร้างโฟลเดอร์เป็น Mind Map และจัดการไฟล์บนเครื่องจริง">
     <title>FolderMind – แผนผังโฟลเดอร์และ Mind Map</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E🗂️%3C/text%3E%3C/svg%3E">
-    <!-- Tailwind CSS CDN (สำหรับ production ควร build เป็นไฟล์ CSS แทน) -->
+    <link rel="manifest" href="manifest.json">
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -29,14 +30,14 @@
     </script>
     <link rel="stylesheet" href="css/style.css">
 </head>
-<body class="bg-darkbg text-slate-100 font-sans antialiased app-shell overflow-hidden flex flex-col">
+<body class="bg-darkbg text-slate-100 font-sans antialiased app-shell overflow-hidden flex flex-col transition-colors duration-200">
 
     <!-- Top Navigation Header -->
-    <header id="appHeader" class="app-header glass-panel border-b border-slate-800/80 shrink-0 z-30">
+    <header id="appHeader" class="app-header glass-panel border-b border-slate-800/80 shrink-0 z-35">
         <!-- Brand & Logo -->
         <div class="app-header__brand flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 via-indigo-500 to-cyan-400 p-0.5 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-                <div class="w-full h-full bg-darkbg rounded-[10px] flex items-center justify-center">
+                <div class="w-full h-full bg-darkbg dark:bg-darkbg rounded-[10px] flex items-center justify-center">
                     <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 002-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
                     </svg>
@@ -44,7 +45,7 @@
             </div>
             <div class="brand-text min-w-0">
                 <h1 class="font-bold text-base bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent flex items-center gap-2">
-                    FolderMind <span class="hidden xl:inline-block text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-mono font-medium border border-indigo-500/30">v3.0 Sync</span>
+                    FolderMind <span class="hidden xl:inline-block text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-mono font-medium border border-indigo-500/30">v3.1 Pro</span>
                 </h1>
                 <p class="hidden md:block lg:hidden xl:block text-xs text-slate-400">แสดงโฟลเดอร์เป็น Mind Map และจัดการไฟล์บนดิสก์</p>
             </div>
@@ -53,7 +54,7 @@
         <!-- Middle Controls: View Selector & Search -->
         <div class="app-header__middle">
             <!-- View Toggle -->
-            <div class="bg-slate-900/90 p-1 rounded-xl border border-slate-800 flex items-center text-xs font-medium">
+            <div class="bg-slate-900/90 dark:bg-slate-900/90 p-1 rounded-xl border border-slate-800 flex items-center text-xs font-medium">
                 <button id="viewMindmapBtn" aria-label="มุมมอง Mind Map" title="มุมมอง Mind Map" class="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all text-white bg-indigo-600 shadow-md">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18"></path></svg>
                     <span class="hidden sm:inline">Mind Map</span>
@@ -76,13 +77,19 @@
 
         <!-- Action Buttons & Export Menu -->
         <div class="app-header__actions flex items-center gap-2">
+            <!-- Theme Toggle Button -->
+            <button id="themeToggleBtn" aria-label="สลับธีมสว่าง/มืด" title="สลับธีมสว่าง/มืด" class="p-2 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 rounded-xl text-xs transition-all">
+                <svg id="themeIconDark" class="w-4 h-4 text-amber-400 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                <svg id="themeIconLight" class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+            </button>
+
             <!-- Real-Time Sync Disk Selector (Primary) -->
             <button id="openLiveSyncBtn" aria-label="เปิดโฟลเดอร์แบบ Sync เครื่องจริง" title="เปิดโฟลเดอร์แบบ Sync เครื่องจริง" class="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-semibold px-3.5 py-1.5 rounded-xl text-xs transition-all shadow-lg shadow-emerald-500/20 active:scale-95">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
                 <span class="hidden xl:inline">เปิดโฟลเดอร์แบบ Sync เครื่องจริง</span><span class="hidden sm:inline xl:hidden">เปิดโฟลเดอร์ (Sync)</span>
             </button>
 
-            <!-- Open Folder Input Fallback (Read-Only) -->
+            <!-- Open Folder Input Fallback -->
             <input type="file" id="folderInput" webkitdirectory directory multiple class="hidden">
             <button id="selectFolderBtn" title="เปิดโฟลเดอร์แบบดูอย่างเดียว" class="flex items-center gap-1.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 px-3 py-1.5 rounded-xl text-xs font-medium transition-all">
                 <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 002-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
@@ -123,18 +130,15 @@
     <!-- Sub-bar Tools & Info -->
     <div id="subBar" class="app-subbar bg-slate-950/80 border-b border-slate-900 text-xs text-slate-400 shrink-0">
         <div class="app-subbar__info flex items-center gap-3">
-            <!-- Mode Badge -->
             <div id="modeBadge" class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-900 text-slate-400 border border-slate-800">
                 <span class="w-2 h-2 rounded-full bg-slate-500"></span>
                 <span>ยังไม่ได้โหลดโฟลเดอร์</span>
             </div>
-
             <span id="statRootName" class="root-name font-medium text-slate-200 truncate">ยังไม่ได้เลือกโฟลเดอร์</span>
             <span id="statSummary" class="hidden sm:inline-block text-slate-400 border-l border-slate-800 pl-3">0 ไฟล์, 0 โฟลเดอร์</span>
         </div>
 
         <div class="app-subbar__tools flex items-center gap-2">
-            <!-- Mind map navigation toolbar controls -->
             <div id="mindmapControls" class="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-0.5">
                 <button id="zoomOutBtn" title="ซูมออก" aria-label="ซูมออก" class="p-1 hover:bg-slate-800 rounded text-slate-300 hover:text-white"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path></svg></button>
                 <span id="zoomLabel" class="text-[11px] font-mono px-1.5 text-slate-400">100%</span>
@@ -142,22 +146,21 @@
                 <button id="zoomFitBtn" title="พอดีหน้าจอ" aria-label="พอดีหน้าจอ" class="p-1 hover:bg-slate-800 rounded text-slate-300 hover:text-white ml-1 border-l border-slate-800 pl-1.5"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg></button>
             </div>
 
-            <!-- Collapse / Expand Tree buttons -->
             <div class="flex items-center gap-1 border-l border-slate-800 pl-2">
-                <button id="expandAllBtn" aria-label="ขยายทั้งหมด" title="ขยายทั้งหมด" class="px-2 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-lg transition-colors text-[11px]"><span class="hidden sm:inline">ขยายทั้งหมด</span><svg class="sm:hidden w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg></button>
-                <button id="collapseAllBtn" aria-label="ยุบทั้งหมด" title="ยุบทั้งหมด" class="px-2 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-lg transition-colors text-[11px]"><span class="hidden sm:inline">ยุบทั้งหมด</span><svg class="sm:hidden w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25"></path></svg></button>
+                <button id="expandAllBtn" aria-label="ขยายทั้งหมด" title="ขยายทั้งหมด" class="px-2 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-lg transition-colors text-[11px]"><span class="hidden sm:inline">ขยายทั้งหมด</span><svg class="sm:hidden w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg></button>
+                <button id="collapseAllBtn" aria-label="ยุบทั้งหมด" title="ยุบทั้งหมด" class="px-2 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-lg transition-colors text-[11px]"><span class="hidden sm:inline">ยุบทั้งหมด</span><svg class="sm:hidden w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25"></path></svg></button>
             </div>
         </div>
     </div>
 
-    <!-- Backdrop ของ Drawer (จอเล็ก) -->
+    <!-- Backdrop Drawer -->
     <div id="sidebarBackdrop" aria-hidden="true"></div>
 
     <!-- Main Content Work Area -->
     <main class="flex-1 relative overflow-hidden flex">
         
         <!-- Left Stats & Legend Sidebar -->
-        <aside id="statsSidebar" class="w-64 glass-panel border-r border-slate-800/80 flex flex-col shrink-0 transition-all duration-300 z-20">
+        <aside id="statsSidebar" class="w-64 glass-panel border-r border-slate-800/80 flex flex-col shrink-0 transition-all duration-300 z-30">
             <div class="p-3.5 border-b border-slate-800/80 flex items-center justify-between">
                 <h2 class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
                     <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2z"></path></svg>
@@ -188,50 +191,32 @@
                     </div>
                 </div>
 
-                <!-- Color Legend / Extension Categories -->
+                <!-- Color Legend / Extension Categories (Clickable to Filter - ข้อ 5) -->
                 <div>
-                    <h3 class="text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-2.5">ประเภทไฟล์</h3>
-                    <div class="space-y-1.5 text-xs">
-                        <div class="flex items-center justify-between p-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300">
-                            <div class="flex items-center gap-2">
-                                <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
-                                <span>โฟลเดอร์</span>
-                            </div>
+                    <h3 class="text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-2.5">ประเภทไฟล์ (คลิกเพื่อกรอง)</h3>
+                    <div id="legendContainer" class="space-y-1.5 text-xs">
+                        <div data-category="folder" class="legend-filter-item cursor-pointer flex items-center justify-between p-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 hover:bg-amber-500/20 transition-all">
+                            <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span><span>โฟลเดอร์</span></div>
                             <span id="badgeFolderCount" class="font-mono text-[10px] bg-amber-500/20 px-1.5 py-0.5 rounded">0</span>
                         </div>
-                        <div class="flex items-center justify-between p-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-300">
-                            <div class="flex items-center gap-2">
-                                <span class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
-                                <span>โค้ด / สคริปต์</span>
-                            </div>
+                        <div data-category="code" class="legend-filter-item cursor-pointer flex items-center justify-between p-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 hover:bg-cyan-500/20 transition-all">
+                            <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span><span>โค้ด / สคริปต์</span></div>
                             <span id="badgeCodeCount" class="font-mono text-[10px] bg-cyan-500/20 px-1.5 py-0.5 rounded">0</span>
                         </div>
-                        <div class="flex items-center justify-between p-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-300">
-                            <div class="flex items-center gap-2">
-                                <span class="w-2.5 h-2.5 rounded-full bg-purple-400"></span>
-                                <span>รูปภาพและสื่อ</span>
-                            </div>
+                        <div data-category="media" class="legend-filter-item cursor-pointer flex items-center justify-between p-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-300 hover:bg-purple-500/20 transition-all">
+                            <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-purple-400"></span><span>รูปภาพและสื่อ</span></div>
                             <span id="badgeMediaCount" class="font-mono text-[10px] bg-purple-500/20 px-1.5 py-0.5 rounded">0</span>
                         </div>
-                        <div class="flex items-center justify-between p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">
-                            <div class="flex items-center gap-2">
-                                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
-                                <span>เอกสาร</span>
-                            </div>
+                        <div data-category="docs" class="legend-filter-item cursor-pointer flex items-center justify-between p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 hover:bg-emerald-500/20 transition-all">
+                            <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span><span>เอกสาร</span></div>
                             <span id="badgeDocCount" class="font-mono text-[10px] bg-emerald-500/20 px-1.5 py-0.5 rounded">0</span>
                         </div>
-                        <div class="flex items-center justify-between p-1.5 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-300">
-                            <div class="flex items-center gap-2">
-                                <span class="w-2.5 h-2.5 rounded-full bg-orange-400"></span>
-                                <span>ข้อมูล / คอนฟิก</span>
-                            </div>
+                        <div data-category="data" class="legend-filter-item cursor-pointer flex items-center justify-between p-1.5 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-300 hover:bg-orange-500/20 transition-all">
+                            <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-orange-400"></span><span>ข้อมูล / คอนฟิก</span></div>
                             <span id="badgeDataCount" class="font-mono text-[10px] bg-orange-500/20 px-1.5 py-0.5 rounded">0</span>
                         </div>
-                        <div class="flex items-center justify-between p-1.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-300">
-                            <div class="flex items-center gap-2">
-                                <span class="w-2.5 h-2.5 rounded-full bg-rose-400"></span>
-                                <span>ไฟล์บีบอัด</span>
-                            </div>
+                        <div data-category="archives" class="legend-filter-item cursor-pointer flex items-center justify-between p-1.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-300 hover:bg-rose-500/20 transition-all">
+                            <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-rose-400"></span><span>ไฟล์บีบอัด</span></div>
                             <span id="badgeArchiveCount" class="font-mono text-[10px] bg-rose-500/20 px-1.5 py-0.5 rounded">0</span>
                         </div>
                     </div>
@@ -250,15 +235,13 @@
         <!-- Dropzone Container & Viewports -->
         <div id="dropzoneArea" class="flex-1 relative w-full h-full bg-grid-pattern overflow-hidden">
             
-            <!-- Floating Sidebar Expand Toggle (when sidebar collapsed) -->
             <button id="expandSidebarBtn" aria-label="แสดงแถบด้านข้าง" class="absolute top-4 left-4 z-30 p-2 glass-panel rounded-xl text-slate-400 hover:text-white shadow-xl">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
             </button>
 
-            <!-- 1. EMPTY STATE / DRAG & DROP HERO OVERLAY -->
+            <!-- EMPTY STATE -->
             <div id="emptyState" class="absolute inset-0 z-10 flex flex-col items-center p-3 sm:p-6 text-center overflow-y-auto transition-all">
                 <div class="w-full max-w-xl glass-panel p-5 sm:p-12 rounded-3xl border border-slate-800 shadow-2xl shadow-indigo-950/40 relative group hover:border-indigo-500/50 transition-all duration-300">
-                    <!-- Glowing Background Effect -->
                     <div class="absolute -inset-1 bg-gradient-to-r from-emerald-500 via-indigo-500 to-cyan-500 rounded-3xl blur-xl opacity-25 group-hover:opacity-45 transition duration-500"></div>
 
                     <div class="relative flex flex-col items-center">
@@ -270,7 +253,7 @@
 
                         <h2 class="text-xl sm:text-2xl font-bold text-white mb-2">เลือกโฟลเดอร์สำหรับ Mind Map และ Sync ดิสก์</h2>
                         <p class="text-slate-400 text-sm mb-6 max-w-md">
-                            เชื่อมต่อโฟลเดอร์บนเครื่องจริงของคุณ เพื่อสร้างไฟล์/โฟลเดอร์ย่อย และแสดง Mind Map สวยงาม
+                            เชื่อมต่อโฟลเดอร์บนเครื่องจริงของคุณ เพื่อสร้าง/เปลี่ยนชื่อ/ลบไฟล์ และแสดง Mind Map สวยงาม
                         </p>
 
                         <div class="flex flex-col sm:flex-row sm:flex-wrap sm:justify-center items-center gap-3 w-full">
@@ -287,36 +270,24 @@
                         </div>
 
                         <div id="fsApiNotSupportedNotice" class="hidden mt-4 p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-300 text-left w-full">
-                            ⚠️ เบราว์เซอร์ของคุณไม่รองรับ File System Access API (แนะนำให้ใช้ Google Chrome, Microsoft Edge หรือ Brave สำหรับโหมด Sync เขียนข้อมูลจริงลงเครื่อง)
-                        </div>
-
-                        <div class="mt-6 sm:mt-8 pt-5 sm:pt-6 border-t border-slate-800/80 w-full flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-slate-500">
-                            <span class="flex items-center gap-1.5">
-                                <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                                Sync กับดิสก์โดยตรง
-                            </span>
-                            <span class="flex items-center gap-1.5">
-                                <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
-                                ประมวลผลในเครื่อง ไม่ส่งข้อมูลออก
-                            </span>
+                            ⚠️ เบราว์เซอร์ของคุณไม่รองรับ File System Access API
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Drag Hover Overlay visual highlight -->
+            <!-- Drag Hover Overlay -->
             <div id="dragHoverOverlay" class="hidden absolute inset-0 z-40 bg-indigo-950/80 backdrop-blur-md border-4 border-dashed border-indigo-500 flex items-center justify-center">
                 <div class="text-center">
                     <svg class="w-16 h-16 text-indigo-400 mx-auto animate-pulse mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
-                    <p class="text-lg sm:text-2xl font-bold text-white px-4">ปล่อยเพื่ออ่านโครงสร้างโฟลเดอร์ (ดูอย่างเดียว)</p>
+                    <p class="text-lg sm:text-2xl font-bold text-white px-4">ปล่อยเพื่ออ่านโครงสร้างโฟลเดอร์</p>
                 </div>
             </div>
 
-            <!-- 2. VIEWPORT: MIND MAP (SVG + Interactive Canvas) -->
+            <!-- MIND MAP VIEWPORT -->
             <div id="mindmapContainer" class="w-full h-full relative cursor-grab active:cursor-grabbing no-select">
                 <svg id="mindmapSvg" class="w-full h-full">
                     <defs>
-                        <!-- Dynamic Bezier line gradient -->
                         <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
                             <stop offset="0%" stop-color="#6366f1" stop-opacity="0.6" />
                             <stop offset="100%" stop-color="#06b6d4" stop-opacity="0.8" />
@@ -327,17 +298,16 @@
                         </filter>
                     </defs>
                     <g id="viewportGroup">
-                        <!-- SVG dynamically rendered tree connectors and node chips -->
                         <g id="linesLayer"></g>
                         <g id="nodesLayer"></g>
                     </g>
                 </svg>
             </div>
 
-            <!-- แถบเครื่องมือของโหนดที่เลือก (แสดงเฉพาะอุปกรณ์สัมผัส) -->
+            <!-- Node Action Bar (Mobile) -->
             <div id="nodeActionBar" class="node-action-bar glass-panel rounded-2xl shadow-2xl hidden" role="toolbar" aria-label="จัดการรายการที่เลือก"></div>
 
-            <!-- 3. VIEWPORT: TREE LIST DIAGRAM VIEW -->
+            <!-- TREE VIEW -->
             <div id="treeContainer" class="hidden w-full h-full overflow-y-auto p-2 sm:p-4 lg:p-6 text-slate-200">
                 <div class="max-w-4xl mx-auto glass-panel rounded-2xl p-3 sm:p-6 border border-slate-800 shadow-xl">
                     <div id="treeHeader" class="flex flex-wrap gap-2 items-center justify-between mb-4 pb-3 border-b border-slate-800">
@@ -346,7 +316,6 @@
                         </div>
                         <div class="text-xs text-slate-500 font-mono break-all" id="treePathNotice">ตำแหน่ง: /</div>
                     </div>
-                    <!-- Tree Root List Container -->
                     <div id="treeContent" class="space-y-1 font-mono text-sm"></div>
                 </div>
             </div>
@@ -376,29 +345,50 @@
                 <div>
                     <label class="block text-slate-400 mb-1">ประเภทที่ต้องการสร้าง:</label>
                     <div class="grid grid-cols-2 gap-2">
-                        <button id="createTypeFileBtn" type="button" class="flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-indigo-500 bg-indigo-600/20 text-indigo-200 font-medium transition-all">
-                            📄 ไฟล์
-                        </button>
-                        <button id="createTypeFolderBtn" type="button" class="flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 font-medium transition-all">
-                            📁 โฟลเดอร์
-                        </button>
+                        <button id="createTypeFileBtn" type="button" class="flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-indigo-500 bg-indigo-600/20 text-indigo-200 font-medium transition-all">📄 ไฟล์</button>
+                        <button id="createTypeFolderBtn" type="button" class="flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 font-medium transition-all">📁 โฟลเดอร์</button>
                     </div>
                 </div>
 
                 <div>
-                    <label class="block text-slate-400 mb-1" id="createModalNameLabel">ชื่อไฟล์ (ระบุนามสกุล เช่น script.js, index.html, notes.txt):</label>
-                    <input type="text" id="createModalInputName" placeholder="ระบุชื่อไฟล์..." class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 text-sm focus:outline-none focus:border-indigo-500 transition-colors">
+                    <label class="block text-slate-400 mb-1" id="createModalNameLabel">ชื่อไฟล์:</label>
+                    <input type="text" id="createModalInputName" placeholder="ระบุชื่อ..." class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 text-sm focus:outline-none focus:border-indigo-500 transition-colors">
                 </div>
             </div>
 
             <div class="mt-6 flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
                 <button id="cancelCreateBtn" class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 text-xs font-medium border border-slate-800">ยกเลิก</button>
-                <button id="submitCreateBtn" class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/30">ยืนยันสร้างบนเครื่อง</button>
+                <button id="submitCreateBtn" class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/30">ยืนยันสร้าง</button>
             </div>
         </div>
     </div>
 
-    <!-- CONFIRM DELETE MODAL -->
+    <!-- RENAME MODAL (ข้อ 4) -->
+    <div id="renameModal" role="dialog" aria-modal="true" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="w-full max-w-md glass-panel rounded-2xl border border-slate-800 shadow-2xl p-4 sm:p-6 relative">
+            <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
+                <h3 class="font-bold text-base text-slate-100 flex items-center gap-2">
+                    <span class="text-cyan-400">✏️</span>
+                    <span>เปลี่ยนชื่อรายการ</span>
+                </h3>
+                <button id="closeRenameModal" aria-label="ปิด" class="text-slate-400 hover:text-white p-1">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="space-y-4 text-xs">
+                <div>
+                    <label class="block text-slate-400 mb-1">ชื่อใหม่:</label>
+                    <input type="text" id="renameModalInput" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 text-sm focus:outline-none focus:border-indigo-500">
+                </div>
+            </div>
+            <div class="mt-6 flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+                <button id="cancelRenameBtn" class="px-4 py-2 rounded-xl bg-slate-900 text-slate-400 text-xs border border-slate-800">ยกเลิก</button>
+                <button id="submitRenameBtn" class="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold">ยืนยันเปลี่ยนชื่อ</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CONFIRM DELETE MODAL (พร้อมระบบพิมพ์ชื่อยืนยันกรณีลบโฟลเดอร์ - ข้อ 2) -->
     <div id="deleteModal" role="dialog" aria-modal="true" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
         <div class="w-full max-w-sm glass-panel rounded-2xl border border-rose-900/50 shadow-2xl p-4 sm:p-6 relative">
             <div class="flex items-center gap-3 mb-4 text-rose-400">
@@ -411,26 +401,28 @@
                 </div>
             </div>
 
-            <p class="text-xs text-slate-300 mb-4 leading-relaxed">
+            <p class="text-xs text-slate-300 mb-3 leading-relaxed">
                 คุณแน่ใจหรือไม่ว่าต้องการลบ <span id="deleteModalTargetName" class="font-bold font-mono text-rose-400">item</span> ?
-                <br><span id="deleteModalWarnSync" class="text-[11px] text-rose-400/80 block mt-1">⚠️ การลบในโหมด Sync จะลบไฟล์/โฟลเดอร์จากดิสก์เครื่องจริงอย่างถาวร!</span>
+                <br><span id="deleteModalWarnSync" class="text-[11px] text-rose-400/80 block mt-1">⚠️ การลบในโหมด Sync จะลบจากดิสก์เครื่องจริง!</span>
             </p>
+
+            <div id="deleteConfirmInputContainer" class="hidden mb-4 space-y-1.5">
+                <label class="block text-[11px] text-rose-300">พิมพ์ชื่อโฟลเดอร์เพื่อยืนยัน:</label>
+                <input type="text" id="deleteConfirmInput" placeholder="พิมพ์ชื่อโฟลเดอร์ตรงนี้..." class="w-full bg-slate-900 border border-rose-500/50 rounded-xl px-3 py-1.5 text-xs text-slate-100 focus:outline-none">
+            </div>
 
             <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
                 <button id="cancelDeleteBtn" class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 text-xs font-medium border border-slate-800">ยกเลิก</button>
-                <button id="confirmDeleteBtn" class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-lg shadow-rose-600/30">ยืนยันลบ</button>
+                <button id="confirmDeleteBtn" disabled class="px-4 py-2 rounded-xl bg-rose-600/50 cursor-not-allowed hover:bg-rose-500 text-white text-xs font-semibold shadow-lg transition-all">ยืนยันลบ</button>
             </div>
         </div>
     </div>
 
-    <!-- ASCII Tree Copy Modal -->
+    <!-- ASCII Tree Modal -->
     <div id="asciiModal" role="dialog" aria-modal="true" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
         <div class="w-full max-w-2xl glass-panel rounded-2xl border border-slate-800 shadow-2xl overflow-hidden flex flex-col">
             <div class="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
-                <h3 class="font-bold text-sm text-slate-200 flex items-center gap-2">
-                    <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                    โครงสร้างโฟลเดอร์แบบ ASCII
-                </h3>
+                <h3 class="font-bold text-sm text-slate-200 flex items-center gap-2">โครงสร้างโฟลเดอร์แบบ ASCII</h3>
                 <button id="closeAsciiModal" aria-label="ปิด" class="text-slate-400 hover:text-white p-1">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
@@ -439,23 +431,27 @@
                 <pre id="asciiText" class="whitespace-pre select-all"></pre>
             </div>
             <div class="p-3 border-t border-slate-800 bg-slate-900/50 flex items-center justify-end gap-2">
-                <button id="copyAsciiBtn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs rounded-xl transition-all shadow-lg shadow-indigo-600/20">
-                    คัดลอกไปยังคลิปบอร์ด
-                </button>
+                <button id="copyAsciiBtn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs rounded-xl shadow-lg">คัดลอกไปยังคลิปบอร์ด</button>
             </div>
         </div>
     </div>
 
     <!-- Notification Toast -->
     <div id="toast" role="status" aria-live="polite" class="fixed bottom-6 right-6 z-50 transform translate-y-20 opacity-0 transition-all duration-300 glass-panel border border-indigo-500/40 text-slate-200 px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3">
-        <div id="toastIcon" class="text-emerald-400 shrink-0">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-        </div>
+        <div id="toastIcon" class="text-emerald-400 shrink-0"></div>
         <span id="toastMsg" class="text-xs font-medium">การแจ้งเตือน</span>
     </div>
 
-    <!-- Application Script -->
+    <!-- PWA Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW registration failed:', err));
+            });
+        }
+    </script>
 
+    <!-- Application Script -->
     <script type="module" src="js/app.js"></script>
 </body>
 </html>
